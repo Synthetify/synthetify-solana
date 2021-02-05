@@ -11,13 +11,13 @@ mod oracle {
     pub fn create(
         ctx: Context<Create>,
         admin: Pubkey,
-        initialPrice: u64,
+        initial_price: u64,
         ticker: Vec<u8>,
     ) -> ProgramResult {
         let counter = &mut ctx.accounts.price_feed;
         counter.symbol = ticker;
         counter.admin = admin;
-        counter.price = initialPrice;
+        counter.price = initial_price;
         counter.paused = false;
         Ok(())
     }
