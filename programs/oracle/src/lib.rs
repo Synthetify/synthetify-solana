@@ -21,9 +21,16 @@ mod oracle {
         counter.paused = false;
         Ok(())
     }
-    pub fn pause(ctx: Context<Pause>) -> ProgramResult {
+
+    pub fn set_paused(ctx: Context<Pause>, paused: bool) -> ProgramResult {
         let counter = &mut ctx.accounts.price_feed;
-        counter.paused = true;
+        counter.paused = paused;
+        Ok(())
+    }
+
+    pub fn set_price(ctx: Context<SetPrice>, price: u64) -> ProgramResult {
+        let counter = &mut ctx.accounts.price_feed;
+        counter.price = price;
         Ok(())
     }
 }
@@ -38,6 +45,13 @@ pub struct Create<'info> {
 }
 #[derive(Accounts)]
 pub struct Pause<'info> {
+    #[account(mut, has_one = admin)]
+    pub price_feed: ProgramAccount<'info, PriceFeed>,
+    #[account(signer)]
+    pub admin: AccountInfo<'info>,
+}
+#[derive(Accounts)]
+pub struct SetPrice<'info> {
     #[account(mut, has_one = admin)]
     pub price_feed: ProgramAccount<'info, PriceFeed>,
     #[account(signer)]

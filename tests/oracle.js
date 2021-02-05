@@ -2,47 +2,113 @@ const anchor = require('@project-serum/anchor')
 const assert = require('assert')
 describe('oracle', () => {
   const provider = anchor.Provider.local()
-  // Configure the client to use the local cluster.
   anchor.setProvider(provider)
-  const feed = new anchor.web3.Account()
-  const program = anchor.workspace.Oracle
 
-  it('Create feed', async () => {
-    // Add your test here.
-    // console.log(provider.wallet)
-    // console.log(anchor.Provider.env())
-    // console.log(anchor.workspace)
-    // console.log(program)
-    const initPrice = new anchor.BN(10)
-    const ticker = Buffer.from('ABC', 'utf-8')
-    // console.log(feed)
-    await program.rpc.create(provider.wallet.publicKey, initPrice, ticker, {
+  const program = anchor.workspace.Oracle
+  let priceFeed
+  let admin
+  const initPrice = new anchor.BN(100)
+  const ticker = Buffer.from('GME', 'utf-8')
+  beforeEach(async () => {
+    // create Oracle
+    priceFeed = new anchor.web3.Account()
+    admin = new anchor.web3.Account()
+    await program.rpc.create(admin.publicKey, initPrice, ticker, {
       accounts: {
-        priceFeed: feed.publicKey,
+        priceFeed: priceFeed.publicKey,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       },
-      signers: [feed],
+      signers: [priceFeed],
       // WHY 56 tho?
-      instructions: [await program.account.priceFeed.createInstruction(feed, 56)],
+      instructions: [await program.account.priceFeed.createInstruction(priceFeed, 56)],
     })
-    // await program.account.priceFeed.createInstruction(priceFeed, initPrice)
-
-    const account = await program.account.priceFeed(feed.publicKey)
-    console.log(account)
-    assert.equal(account.paused, false)
-    // console.log(program.account.priceFeed)
-    // console.log('Your transaction signature', tx)
   })
+
+  it('Check initial priceFeed', async () => {
+    const account = await program.account.priceFeed(priceFeed.publicKey)
+    assert.equal(account.paused, false)
+    assert.ok(account.price.eq(initPrice))
+    assert.ok(account.admin.equals(admin.publicKey))
+    assert.ok(account.symbol.equals(ticker))
+  })
+
   it('Pause feed', async () => {
-    await program.rpc.pause({
+    await program.rpc.setPaused(true, {
       accounts: {
-        priceFeed: feed.publicKey,
-        admin: provider.wallet.publicKey,
+        priceFeed: priceFeed.publicKey,
+        admin: admin.publicKey,
       },
-      signers: [provider.wallet.payer],
+      signers: [admin],
     })
-    const account = await program.account.priceFeed(feed.publicKey)
-    console.log(account)
-    assert.equal(account.paused, true)
+    const accountFeedPaused = await program.account.priceFeed(priceFeed.publicKey)
+    assert.equal(accountFeedPaused.paused, true)
+
+    await program.rpc.setPaused(false, {
+      accounts: {
+        priceFeed: priceFeed.publicKey,
+        admin: admin.publicKey,
+      },
+      signers: [admin],
+    })
+    const accountFeedLive = await program.account.priceFeed(priceFeed.publicKey)
+    assert.equal(accountFeedLive.paused, false)
+  })
+
+  it('Set newPrice', async () => {
+    const newPrice = new anchor.BN(123)
+    await program.rpc.setPrice(newPrice, {
+      accounts: {
+        priceFeed: priceFeed.publicKey,
+        admin: admin.publicKey,
+      },
+      signers: [admin],
+    })
+    const account = await program.account.priceFeed(priceFeed.publicKey)
+    assert.ok(account.price.eq(newPrice))
+  })
+
+  describe('Wrong admin', async () => {
+    it('Fails to set newPrice', async () => {
+      const newPrice = new anchor.BN(123)
+      fakeAdmin = new anchor.web3.Account()
+      try {
+        await program.rpc.setPrice(newPrice, {
+          accounts: {
+            priceFeed: priceFeed.publicKey,
+            admin: admin.publicKey,
+          },
+          signers: [fakeAdmin],
+        })
+        assert.ok(false)
+      } catch (error) {
+        // Need support for custom error messages here
+        // console.log(error)
+      }
+
+      const account = await program.account.priceFeed(priceFeed.publicKey)
+      assert.equal(account.price.eq(newPrice), false)
+    })
+    it('Fails to set pause', async () => {
+      fakeAdmin = new anchor.web3.Account()
+      const accountBefore = await program.account.priceFeed(priceFeed.publicKey)
+      assert.equal(accountBefore.paused, false)
+      try {
+        await program.rpc.setPaused(true, {
+          accounts: {
+            priceFeed: priceFeed.publicKey,
+            admin: admin.publicKey,
+          },
+          signers: [fakeAdmin],
+        })
+
+        assert.ok(false)
+      } catch (error) {
+        // Need support for custom error messages here
+        // console.log(error)
+      }
+
+      const accountAfter = await program.account.priceFeed(priceFeed.publicKey)
+      assert.equal(accountAfter.paused, false)
+    })
   })
 })
