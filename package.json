@@ -23,5 +23,18 @@
     "@project-serum/serum": "^0.13.20",
     "@solana/spl-token": "0.0.13",
     "@solana/web3.js": "^0.90.5"
+  },
+  "devDependencies": {
+    "eslint": "^7.19.0",
+    "eslint-config-prettier": "^7.2.0",
+    "eslint-config-prettier-standard": "^4.0.0",
+    "eslint-config-standard": "^16.0.2",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-mocha": "^8.0.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-prettier": "^3.3.1",
+    "eslint-plugin-promise": "^4.2.1",
+    "prettier": "^2.2.1",
+    "prettier-config-standard": "^4.0.0"
   }
 }
