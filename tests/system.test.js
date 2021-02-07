@@ -42,7 +42,6 @@ describe('system', () => {
       wallet
     )
     collateralAccount = await collateralToken.createAccount(mintAuthority)
-    await collateralToken.mintTo(collateralAccount, wallet, [], 100)
 
     await systemProgram.state.rpc.initialize(
       _nonce,
@@ -74,10 +73,10 @@ describe('system', () => {
     assert.ok(state.collateralAccount.equals(collateralAccount))
     assert.ok(state.debt.eq(new anchor.BN(0)))
     assert.ok(state.shares.eq(new anchor.BN(0)))
-    assert.ok(state.assets.length === 3)
+    assert.ok(state.assets.length === 0)
     // initial collateralBalance
     const collateralAccountInfo = await collateralToken.getAccountInfo(collateralAccount)
-    assert.ok(collateralAccountInfo.amount.eq(new anchor.BN(100)))
+    assert.ok(collateralAccountInfo.amount.eq(new anchor.BN(0)))
   })
   it('#mint()', async () => {
     const userAccount = new anchor.web3.Account()
@@ -95,7 +94,7 @@ describe('system', () => {
     // console.log(info)
     assert.ok(info.amount.eq(amount))
   })
-  it.only('#addAsset()', async () => {
+  it('#addAsset()', async () => {
     const tx = await Token.createMint(
       connection,
       wallet,
@@ -122,6 +121,7 @@ describe('system', () => {
     const userAccount = new anchor.web3.Account()
     const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
     const amount = new anchor.BN(10)
+    await collateralToken.mintTo(collateralAccount, wallet, [], 10)
     await systemProgram.state.rpc.withdraw(amount, {
       accounts: {
         authority: mintAuthority,
@@ -133,6 +133,70 @@ describe('system', () => {
     const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
     // console.log(info)
     assert.ok(info.amount.eq(amount))
+  })
+
+  it('#createUserAccount()', async () => {
+    const userWallet = new anchor.web3.Account()
+    const userAccount = new anchor.web3.Account()
+    await systemProgram.rpc.createUserAccount(userWallet.publicKey, {
+      accounts: {
+        userAccount: userAccount.publicKey,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY
+      },
+      signers: [userAccount],
+      // Auto allocate memory
+      instructions: [await systemProgram.account.userAccount.createInstruction(userAccount)]
+    })
+    const account = await systemProgram.account.userAccount(userAccount.publicKey)
+    assert.ok(account.shares.eq(new anchor.BN(0)))
+    assert.ok(account.collateral.eq(new anchor.BN(0)))
+    assert.ok(account.owner.equals(userWallet.publicKey))
+  })
+  it.only('#deposit()', async () => {
+    const userWallet = new anchor.web3.Account()
+    const userAccount = new anchor.web3.Account()
+    await systemProgram.rpc.createUserAccount(userWallet.publicKey, {
+      accounts: {
+        userAccount: userAccount.publicKey,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY
+      },
+      signers: [userAccount],
+      // Auto allocate memory
+      instructions: [await systemProgram.account.userAccount.createInstruction(userAccount)]
+    })
+    const account = await systemProgram.account.userAccount(userAccount.publicKey)
+    assert.ok(account.shares.eq(new anchor.BN(0)))
+    assert.ok(account.collateral.eq(new anchor.BN(0)))
+    assert.ok(account.owner.equals(userWallet.publicKey))
+    const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
+    const amount = new anchor.BN(10)
+    await collateralToken.mintTo(userCollateralTokenAccount, wallet, [], amount.toNumber())
+
+    const userCollateralTokenAccountInfo = await collateralToken.getAccountInfo(
+      userCollateralTokenAccount
+    )
+    assert.ok(userCollateralTokenAccountInfo.amount.eq(amount))
+    await systemProgram.state.rpc.deposit({
+      accounts: {
+        userAccount: userAccount.publicKey,
+        collateralAccount: collateralAccount
+      },
+      instructions: [
+        await collateralToken.transfer(
+          userCollateralTokenAccount,
+          collateralAccount,
+          userAccount,
+          [],
+          amount.toNumber()
+        )
+      ]
+    })
+    const collateralAccountInfo = await collateralToken.getAccountInfo(collateralAccount)
+    assert.ok(collateralAccountInfo.amount.eq(amount))
+    const accountAfterDeposit = await systemProgram.account.userAccount(userAccount.publicKey)
+    assert.ok(accountAfterDeposit.shares.eq(new anchor.BN(0)))
+    assert.ok(accountAfterDeposit.collateral.eq(amount))
+    assert.ok(accountAfterDeposit.owner.equals(userWallet.publicKey))
   })
 
   // it('Pull data from priceFeed', async () => {

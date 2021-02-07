@@ -1,7 +1,7 @@
 #![feature(proc_macro_hygiene)]
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Burn, MintTo, Transfer};
+use anchor_spl::token::{self, Burn, MintTo, TokenAccount, Transfer};
 
 #[program]
 pub mod system {
@@ -13,6 +13,7 @@ pub mod system {
         pub initialized: bool,
         pub debt: u64,
         pub shares: u64,
+        pub collateral_balance: u64,
         pub collateral_token: Pubkey,
         pub collateral_account: Pubkey,
         pub assets: Vec<Asset>,
@@ -29,6 +30,7 @@ pub mod system {
                 initialized: false,
                 debt: 0,
                 shares: 0,
+                collateral_balance: 0,
                 collateral_token: Pubkey::default(),
                 collateral_account: Pubkey::default(),
                 assets,
@@ -80,6 +82,23 @@ pub mod system {
             self.assets.push(new_asset);
             Ok(())
         }
+        pub fn deposit(&mut self, ctx: Context<Deposit>) -> Result<()> {
+            let new_balance = ctx.accounts.collateral_account.amount;
+            let deposited = new_balance - self.collateral_balance;
+            if deposited == 0 {
+                return Err(ErrorCode::ZeroDeposit.into());
+            }
+            let user_account = &mut ctx.accounts.user_account;
+            user_account.collateral += deposited;
+            Ok(())
+        }
+    }
+    pub fn create_user_account(ctx: Context<CreateUserAccount>, owner: Pubkey) -> ProgramResult {
+        let user_account = &mut ctx.accounts.user_account;
+        user_account.owner = owner;
+        user_account.shares = 0;
+        user_account.collateral = 0;
+        Ok(())
     }
 }
 
@@ -87,7 +106,12 @@ pub mod system {
 pub struct New {}
 #[derive(Accounts)]
 pub struct Initialize {}
-
+#[derive(Accounts)]
+pub struct CreateUserAccount<'info> {
+    #[account(init)]
+    pub user_account: ProgramAccount<'info, UserAccount>,
+    pub rent: Sysvar<'info, Rent>,
+}
 #[derive(Accounts)]
 pub struct Mint<'info> {
     pub authority: AccountInfo<'info>,
@@ -136,6 +160,19 @@ pub struct AddAsset<'info> {
     pub asset_address: AccountInfo<'info>,
     pub feed_address: AccountInfo<'info>,
 }
+#[derive(Accounts)]
+pub struct Deposit<'info> {
+    #[account(mut)]
+    pub user_account: ProgramAccount<'info, UserAccount>,
+    pub collateral_account: CpiAccount<'info, TokenAccount>,
+}
+#[account]
+pub struct UserAccount {
+    pub owner: Pubkey,
+    pub shares: u64,
+    pub collateral: u64,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Default, Copy, Clone)]
 pub struct Asset {
     pub feed_address: Pubkey,
@@ -150,4 +187,6 @@ pub enum ErrorCode {
     ErrorType,
     #[msg("Assets is full")]
     AssetsFull,
+    #[msg("Deposited zero")]
+    ZeroDeposit,
 }
