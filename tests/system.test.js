@@ -152,7 +152,7 @@ describe('system', () => {
     assert.ok(account.collateral.eq(new anchor.BN(0)))
     assert.ok(account.owner.equals(userWallet.publicKey))
   })
-  it.only('#deposit()', async () => {
+  it('#deposit()', async () => {
     const userWallet = new anchor.web3.Account()
     const userAccount = new anchor.web3.Account()
     await systemProgram.rpc.createUserAccount(userWallet.publicKey, {

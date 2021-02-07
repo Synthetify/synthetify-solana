@@ -2,7 +2,7 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Burn, MintTo, TokenAccount, Transfer};
-
+mod math;
 #[program]
 pub mod system {
     use super::*;
@@ -16,6 +16,8 @@ pub mod system {
         pub collateral_balance: u64,
         pub collateral_token: Pubkey,
         pub collateral_account: Pubkey,
+        pub collateralization_level: u32,
+        pub max_delay: u32,
         pub assets: Vec<Asset>,
     }
 
@@ -31,6 +33,8 @@ pub mod system {
                 debt: 0,
                 shares: 0,
                 collateral_balance: 0,
+                collateralization_level: 500, // 500%
+                max_delay: 1000,
                 collateral_token: Pubkey::default(),
                 collateral_account: Pubkey::default(),
                 assets,
@@ -78,6 +82,8 @@ pub mod system {
                 feed_address: *ctx.accounts.feed_address.to_account_info().key,
                 price: 0,
                 supply: 0,
+                last_update: 0,
+                decimals: 0,
             };
             self.assets.push(new_asset);
             Ok(())
@@ -178,7 +184,9 @@ pub struct Asset {
     pub feed_address: Pubkey,
     pub asset_address: Pubkey,
     pub price: u64,
+    pub last_update: u64,
     pub supply: u64,
+    pub decimals: u8,
 }
 
 #[error]
@@ -189,4 +197,6 @@ pub enum ErrorCode {
     AssetsFull,
     #[msg("Deposited zero")]
     ZeroDeposit,
+    #[msg("Outdated oracle")]
+    OutdatedOracle,
 }
