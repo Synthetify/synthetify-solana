@@ -18,9 +18,9 @@ describe('system', () => {
   let nonce
   before(async () => {
     await systemProgram.state.rpc.new({
-      accounts: {},
+      accounts: {}
     })
-    let [_mintAuthority, _nonce] = await anchor.web3.PublicKey.findProgramAddress(
+    const [_mintAuthority, _nonce] = await anchor.web3.PublicKey.findProgramAddress(
       [signer.publicKey.toBuffer()],
       systemProgram.programId
     )
@@ -50,7 +50,7 @@ describe('system', () => {
       collateralToken.publicKey,
       collateralAccount,
       {
-        accounts: {},
+        accounts: {}
       }
     )
     const tx = await Token.createMint(
@@ -74,6 +74,7 @@ describe('system', () => {
     assert.ok(state.collateralAccount.equals(collateralAccount))
     assert.ok(state.debt.eq(new anchor.BN(0)))
     assert.ok(state.shares.eq(new anchor.BN(0)))
+    assert.ok(state.assets.length === 3)
     // initial collateralBalance
     const collateralAccountInfo = await collateralToken.getAccountInfo(collateralAccount)
     assert.ok(collateralAccountInfo.amount.eq(new anchor.BN(100)))
@@ -87,14 +88,37 @@ describe('system', () => {
         authority: mintAuthority,
         mint: token.publicKey,
         to: userTokenAccount,
-        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-      },
+        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID
+      }
     })
     const info = await token.getAccountInfo(userTokenAccount)
     // console.log(info)
     assert.ok(info.amount.eq(amount))
   })
-  it.only('#withdraw()', async () => {
+  it.only('#addAsset()', async () => {
+    const tx = await Token.createMint(
+      connection,
+      wallet,
+      mintAuthority,
+      null,
+      8,
+      TokenInstructions.TOKEN_PROGRAM_ID
+    )
+    const newToken = new Token(connection, tx.publicKey, TokenInstructions.TOKEN_PROGRAM_ID, wallet)
+    // TODO: Create and Add price feed to this new token
+    await systemProgram.state.rpc.addAsset({
+      accounts: {
+        assetAddress: newToken.publicKey,
+        feedAddress: newToken.publicKey
+      }
+    })
+    const state = await systemProgram.state()
+    assert.ok(state.assets.length === 1)
+    assert.ok(state.assets[0].feedAddress.equals(newToken.publicKey))
+    assert.ok(state.assets[0].assetAddress.equals(newToken.publicKey))
+  })
+
+  it('#widthdraw()', async () => {
     const userAccount = new anchor.web3.Account()
     const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
     const amount = new anchor.BN(10)
@@ -103,8 +127,8 @@ describe('system', () => {
         authority: mintAuthority,
         from: collateralAccount,
         to: userCollateralTokenAccount,
-        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-      },
+        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID
+      }
     })
     const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
     // console.log(info)
