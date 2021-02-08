@@ -22,7 +22,8 @@
   "dependencies": {
     "@project-serum/serum": "^0.13.20",
     "@solana/spl-token": "0.0.13",
-    "@solana/web3.js": "^0.90.5"
+    "@solana/web3.js": "^0.90.5",
+    "@project-serum/anchor": "^0.2.0"
   },
   "devDependencies": {
     "eslint": "^7.19.0",
