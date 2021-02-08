@@ -18,3 +18,4 @@ default = []
 anchor-lang = '0.2.0'
 anchor-spl = '0.2.0'
 spl-token = { version = "3.0.1", features = ["no-entrypoint"] }
+oracle = { path = "../oracle", features = ["cpi"] }
