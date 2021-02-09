@@ -1,7 +1,7 @@
 const anchor = require('@project-serum/anchor')
 const assert = require('assert')
-const { Token } = require('@solana/spl-token')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
+const { createToken, createAccountWithCollateral, createPriceFeed } = require('./utils')
 
 describe('system', () => {
   const provider = anchor.Provider.local()
@@ -30,41 +30,10 @@ describe('system', () => {
     )
     nonce = _nonce
     mintAuthority = _mintAuthority
-    collateralTokenFeed = new anchor.web3.Account()
-    await oracleProgram.rpc.create(admin.publicKey, initPrice, ticker, {
-      accounts: {
-        priceFeed: collateralTokenFeed.publicKey,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY
-      },
-      signers: [collateralTokenFeed],
-      instructions: [
-        await oracleProgram.account.priceFeed.createInstruction(collateralTokenFeed, 56)
-      ]
-    })
-    const collateralTokenTx = await Token.createMint(
-      connection,
-      wallet,
-      wallet.publicKey,
-      wallet.publicKey,
-      8,
-      TokenInstructions.TOKEN_PROGRAM_ID
-    )
-    collateralToken = new Token(
-      connection,
-      collateralTokenTx.publicKey,
-      TokenInstructions.TOKEN_PROGRAM_ID,
-      wallet
-    )
+    collateralTokenFeed = await createPriceFeed({ admin, oracleProgram, initPrice, ticker })
+    collateralToken = await createToken({ connection, wallet, mintAuthority: wallet.publicKey })
     collateralAccount = await collateralToken.createAccount(mintAuthority)
-    const tx = await Token.createMint(
-      connection,
-      wallet,
-      mintAuthority,
-      null,
-      8,
-      TokenInstructions.TOKEN_PROGRAM_ID
-    )
-    syntheticUsd = new Token(connection, tx.publicKey, TokenInstructions.TOKEN_PROGRAM_ID, wallet)
+    syntheticUsd = await createToken({ connection, wallet, mintAuthority })
     await systemProgram.state.rpc.initialize(
       _nonce,
       signer.publicKey,
@@ -88,6 +57,7 @@ describe('system', () => {
     assert.ok(state.collateralAccount.equals(collateralAccount))
     assert.ok(state.debt.eq(new anchor.BN(0)))
     assert.ok(state.shares.eq(new anchor.BN(0)))
+    // initaly we will have collateral and sythetic usd
     assert.ok(state.assets.length === 2)
     assert.ok(state.assets[0].price.eq(new anchor.BN(1e4)))
     assert.ok(state.assets[0].assetAddress.equals(syntheticUsd.publicKey))
@@ -149,47 +119,19 @@ describe('system', () => {
       }
     })
     const state = await systemProgram.state()
-    console.log(state.assets)
+    // collateral will always have index 1
+    assert.ok(state.assets[1].price.eq(initPrice))
   })
-  it.only('#mint()', async () => {
-    const userWallet = new anchor.web3.Account()
-    const userAccount = new anchor.web3.Account()
-    await systemProgram.rpc.createUserAccount(userWallet.publicKey, {
-      accounts: {
-        userAccount: userAccount.publicKey,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY
-      },
-      signers: [userAccount],
-      instructions: [await systemProgram.account.userAccount.createInstruction(userAccount)]
+  it('#mint()', async () => {
+    const { userSystemAccount } = await createAccountWithCollateral({
+      collateralAccount,
+      collateralToken,
+      mintAuthority: wallet,
+      systemProgram,
+      amount: new anchor.BN(100 * 1e8)
     })
-    const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
-    const amountCollateral = new anchor.BN(100 * 1e8)
-    await collateralToken.mintTo(
-      userCollateralTokenAccount,
-      wallet,
-      [],
-      amountCollateral.toNumber()
-    )
-    await systemProgram.state.rpc.deposit({
-      accounts: {
-        userAccount: userAccount.publicKey,
-        collateralAccount: collateralAccount
-      },
-      instructions: [
-        await collateralToken.transfer(
-          userCollateralTokenAccount,
-          collateralAccount,
-          userAccount,
-          [],
-          amountCollateral.toNumber()
-        )
-      ]
-    })
-    // const collateralAccountInfo = await collateralToken.getAccountInfo(collateralAccount)
-    // const accountAfterDeposit = await systemProgram.account.userAccount(userAccount.publicKey)
-
-    const userTokenAccount = await syntheticUsd.createAccount(userAccount.publicKey)
-    const amount = new anchor.BN(40 * 1e8)
+    const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+    const amount = new anchor.BN(1 * 1e8)
     await systemProgram.state.rpc.mint(amount, {
       accounts: {
         authority: mintAuthority,
@@ -197,7 +139,7 @@ describe('system', () => {
         to: userTokenAccount,
         tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
         clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-        userAccount: userAccount.publicKey
+        userAccount: userSystemAccount.publicKey
       },
       instructions: [
         await systemProgram.state.rpc.updatePrice(collateralTokenFeed.publicKey, {
@@ -209,24 +151,14 @@ describe('system', () => {
       ]
     })
     const info = await syntheticUsd.getAccountInfo(userTokenAccount)
-    console.log(info)
-    const account = await systemProgram.account.userAccount(userAccount.publicKey)
-    console.log(account)
+    assert.ok(info.amount.eq(amount))
+    const account = await systemProgram.account.userAccount(userSystemAccount.publicKey)
+    assert.ok(account.shares.eq(new anchor.BN(1e8))) // Its first mint so shares will be 1e8
     const state = await systemProgram.state()
-    console.log(state.shares)
-
-    // assert.ok(info.amount.eq(amount))
+    assert.ok(state.shares.eq(new anchor.BN(1e8))) // Its first mint so shares will be 1e8
   })
   it('#addAsset()', async () => {
-    const tx = await Token.createMint(
-      connection,
-      wallet,
-      mintAuthority,
-      null,
-      8,
-      TokenInstructions.TOKEN_PROGRAM_ID
-    )
-    const newToken = new Token(connection, tx.publicKey, TokenInstructions.TOKEN_PROGRAM_ID, wallet)
+    const newToken = await createToken({ connection, mintAuthority, wallet })
     // TODO: Create and Add price feed to this new token
     await systemProgram.state.rpc.addAsset({
       accounts: {
@@ -275,15 +207,4 @@ describe('system', () => {
     assert.ok(account.collateral.eq(new anchor.BN(0)))
     assert.ok(account.owner.equals(userWallet.publicKey))
   })
-
-  // it('Pull data from priceFeed', async () => {
-  //   await program.state.rpc.pullData({
-  //     accounts: {
-  //       priceFeedAccount: priceFeed.publicKey,
-  //     },
-  //   })
-  //   const state = await program.state()
-  //   assert.ok(state.price.eq(initPrice))
-  //   assert.ok(state.ticker.equals(ticker))
-  // })
 })

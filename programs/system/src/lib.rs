@@ -8,7 +8,6 @@ use oracle::PriceFeed;
 #[program]
 pub mod system {
 
-    use anchor_lang::solana_program::log;
 
     use super::*;
     #[state]
@@ -39,7 +38,7 @@ pub mod system {
                 shares: 0,
                 collateral_balance: 0,
                 collateralization_level: 500, // 500%
-                max_delay: 1000,
+                max_delay: 10,
                 collateral_token: Pubkey::default(),
                 collateral_account: Pubkey::default(),
                 assets,
@@ -113,8 +112,8 @@ pub mod system {
             let new_shares = calculate_new_shares(&self.shares, &debt, &amount_mint_usd);
             self.debt = debt + amount_mint_usd;
             // log does not work
-            // log::sol_log("amount mint");
-            // log::sol_log(&amount_mint_usd.to_string());
+            msg!("test");
+            msg!(&amount_mint_usd.to_string());
             self.shares += new_shares;
             user_account.shares += new_shares;
             mint_asset.supply += amount;
@@ -170,6 +169,7 @@ pub mod system {
                 .find(|x| x.feed_address == feed_address)
                 .unwrap();
             let slot = ctx.accounts.clock.slot;
+            msg!("{:?}", slot);
             asset.price = ctx.accounts.price_feed_account.price;
             asset.last_update = slot;
             Ok(())
