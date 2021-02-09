@@ -174,7 +174,6 @@ pub mod system {
                 .find(|x| x.feed_address == feed_address)
                 .unwrap();
             let slot = ctx.accounts.clock.slot;
-            msg!("{:?}", slot);
             asset.price = ctx.accounts.price_feed_account.price;
             asset.last_update = slot;
             Ok(())

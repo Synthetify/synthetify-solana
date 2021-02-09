@@ -68,5 +68,36 @@ const createPriceFeed = async ({
   })
   return collateralTokenFeed
 }
+const mintUsd = async ({
+  systemProgram,
+  mintAmount,
+  userSystemAccount,
+  userTokenAccount,
+  mintAuthority
+}) => {
+  const state = await systemProgram.state()
+  const updateAllFeeds = async () => {
+    // first token is synthetic usd
+    for (let index = 1; index < state.assets.length; index++) {
+      await systemProgram.state.rpc.updatePrice(state.assets[index].feedAddress, {
+        accounts: {
+          priceFeedAccount: state.assets[index].feedAddress,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        }
+      })
+    }
+  }
+  await systemProgram.state.rpc.mint(mintAmount, {
+    accounts: {
+      authority: mintAuthority,
+      mint: state.assets[0].assetAddress,
+      to: userTokenAccount,
+      tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+      clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+      userAccount: userSystemAccount.publicKey
+    },
+    instructions: [await updateAllFeeds()]
+  })
+}
 
-module.exports = { createToken, createAccountWithCollateral, createPriceFeed }
+module.exports = { createToken, createAccountWithCollateral, createPriceFeed, mintUsd }

@@ -1,7 +1,7 @@
 const anchor = require('@project-serum/anchor')
 const assert = require('assert')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
-const { createToken, createAccountWithCollateral, createPriceFeed } = require('./utils')
+const { createToken, createAccountWithCollateral, createPriceFeed, mintUsd } = require('./utils')
 
 describe('system', () => {
   const provider = anchor.Provider.local()
@@ -134,23 +134,12 @@ describe('system', () => {
         amount: new anchor.BN(100 * 1e8)
       })
       const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
-      await systemProgram.state.rpc.mint(firstMintAmount, {
-        accounts: {
-          authority: mintAuthority,
-          mint: syntheticUsd.publicKey,
-          to: userTokenAccount,
-          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-          userAccount: userSystemAccount.publicKey
-        },
-        instructions: [
-          await systemProgram.state.rpc.updatePrice(collateralTokenFeed.publicKey, {
-            accounts: {
-              priceFeedAccount: collateralTokenFeed.publicKey,
-              clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-            }
-          })
-        ]
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: firstMintAmount
       })
       const info = await syntheticUsd.getAccountInfo(userTokenAccount)
       assert.ok(info.amount.eq(firstMintAmount))
@@ -170,23 +159,12 @@ describe('system', () => {
 
       const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
       // We mint same amount
-      await systemProgram.state.rpc.mint(firstMintAmount, {
-        accounts: {
-          authority: mintAuthority,
-          mint: syntheticUsd.publicKey,
-          to: userTokenAccount,
-          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-          userAccount: userSystemAccount.publicKey
-        },
-        instructions: [
-          await systemProgram.state.rpc.updatePrice(collateralTokenFeed.publicKey, {
-            accounts: {
-              priceFeedAccount: collateralTokenFeed.publicKey,
-              clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-            }
-          })
-        ]
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: firstMintAmount
       })
       const info = await syntheticUsd.getAccountInfo(userTokenAccount)
       assert.ok(info.amount.eq(firstMintAmount))
@@ -206,23 +184,12 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
       // We mint same amount
-      await systemProgram.state.rpc.mint(mintAmount, {
-        accounts: {
-          authority: mintAuthority,
-          mint: syntheticUsd.publicKey,
-          to: userTokenAccount,
-          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-          userAccount: userSystemAccount.publicKey
-        },
-        instructions: [
-          await systemProgram.state.rpc.updatePrice(collateralTokenFeed.publicKey, {
-            accounts: {
-              priceFeedAccount: collateralTokenFeed.publicKey,
-              clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-            }
-          })
-        ]
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: mintAmount
       })
       const info = await syntheticUsd.getAccountInfo(userTokenAccount)
       assert.ok(info.amount.eq(mintAmount))
@@ -278,23 +245,12 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
       try {
-        await systemProgram.state.rpc.mint(new anchor.BN(50 * 1e8), {
-          accounts: {
-            authority: mintAuthority,
-            mint: syntheticUsd.publicKey,
-            to: userTokenAccount,
-            tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-            clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-            userAccount: userSystemAccount.publicKey
-          },
-          instructions: [
-            await systemProgram.state.rpc.updatePrice(collateralTokenFeed.publicKey, {
-              accounts: {
-                priceFeedAccount: collateralTokenFeed.publicKey,
-                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-              }
-            })
-          ]
+        await mintUsd({
+          systemProgram,
+          userSystemAccount,
+          userTokenAccount,
+          mintAuthority,
+          mintAmount: new anchor.BN(50 * 1e8)
         })
         assert.ok(false)
       } catch (error) {
