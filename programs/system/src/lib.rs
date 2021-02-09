@@ -8,7 +8,6 @@ use oracle::PriceFeed;
 #[program]
 pub mod system {
 
-
     use super::*;
     #[state]
     pub struct InternalState {
@@ -80,9 +79,14 @@ pub mod system {
             self.assets = vec![usd_asset, collateral_asset];
             Ok(())
         }
+        // This only support sythetic USD
         pub fn mint(&mut self, ctx: Context<Mint>, amount: u64) -> Result<()> {
+            msg!("mint");
             let user_account = &mut ctx.accounts.user_account;
             let mint_token_adddress = ctx.accounts.mint.to_account_info().clone().key;
+            if !mint_token_adddress.eq(&self.assets[0].asset_address) {
+                return Err(ErrorCode::NotSyntheticUsd.into());
+            }
             let slot = ctx.accounts.clock.slot;
             let debt = calculate_debt(&self.assets, slot, self.max_delay).unwrap();
 
@@ -156,6 +160,7 @@ pub mod system {
             }
             let user_account = &mut ctx.accounts.user_account;
             user_account.collateral += deposited;
+            self.collateral_balance = new_balance;
             Ok(())
         }
         pub fn update_price(
@@ -286,4 +291,6 @@ pub enum ErrorCode {
     MissingCollateralToken,
     #[msg("Mint limit crossed")]
     MintLimit,
+    #[msg("Wrong token not sythetic usd")]
+    NotSyntheticUsd,
 }
