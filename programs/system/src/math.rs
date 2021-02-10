@@ -9,7 +9,7 @@ const ORACLE_OFFSET: u8 = 4;
 pub fn calculate_debt(assets: &Vec<Asset>, slot: u64, max_delay: u32) -> Result<u64> {
     let mut debt = 0u64;
     for asset in assets.iter() {
-        if asset.last_update < slot - max_delay as u64 {
+        if (asset.last_update + max_delay as u64) < slot {
             return Err(ErrorCode::OutdatedOracle.into());
         }
         debt += (asset.price * asset.supply)
@@ -42,7 +42,16 @@ pub fn calculate_max_user_debt_in_usd(
         );
     return user_max_debt * 100 / collateralization_level as u64;
 }
-
+pub fn calculate_max_withdraw_in_usd(
+    max_user_debt_in_usd: &u64,
+    user_debt_in_usd: &u64,
+    collateralization_level: &u32,
+) -> u64 {
+    if max_user_debt_in_usd < user_debt_in_usd {
+        return 0;
+    }
+    return ((max_user_debt_in_usd - user_debt_in_usd) * *collateralization_level as u64) / 100;
+}
 pub fn calculate_amount_mint_in_usd(mint_asset: Asset, amount: u64) -> u64 {
     let mint_amount_in_usd = mint_asset.price * amount
         / 10u64.pow(
@@ -198,5 +207,18 @@ mod tests {
 
         let new_shares_initial = calculate_new_shares(&shares, &debt, &minted_amount_usd);
         assert_eq!(new_shares_initial, 10u64.pow(8) / 3);
+    }
+    #[test]
+    fn test_calculate_max_withdraw_in_usd() {
+        let max_user_debt_in_usd = 20;
+        let user_debt_in_usd = 10;
+        let collateralization_level = 500;
+
+        let max_withdraw_in_usd = calculate_max_withdraw_in_usd(
+            &max_user_debt_in_usd,
+            &user_debt_in_usd,
+            &collateralization_level,
+        );
+        assert_eq!(max_withdraw_in_usd, 50);
     }
 }

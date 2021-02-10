@@ -1,7 +1,13 @@
 const anchor = require('@project-serum/anchor')
 const assert = require('assert')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
-const { createToken, createAccountWithCollateral, createPriceFeed, mintUsd } = require('./utils')
+const {
+  createToken,
+  createAccountWithCollateral,
+  createPriceFeed,
+  mintUsd,
+  updateAllFeeds
+} = require('./utils')
 
 describe('system', () => {
   const provider = anchor.Provider.local()
@@ -122,7 +128,7 @@ describe('system', () => {
     // collateral will always have index 1
     assert.ok(state.assets[1].price.eq(initPrice))
   })
-  describe.only('#mint()', () => {
+  describe('#mint()', () => {
     const firstMintAmount = new anchor.BN(1 * 1e8)
     const firstMintShares = new anchor.BN(1 * 1e8)
     it('1st mint', async () => {
@@ -274,23 +280,122 @@ describe('system', () => {
   //   assert.ok(state.assets[2].feedAddress.equals(newToken.publicKey))
   //   assert.ok(state.assets[2].assetAddress.equals(newToken.publicKey))
   // })
+  describe('#widthdraw()', () => {
+    it('withdraw with zero debt', async () => {
+      const amountCollateral = new anchor.BN(100 * 1e8)
+      const { userSystemAccount, userCollateralTokenAccount } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: amountCollateral
+      })
+      const stateBefore = await systemProgram.state()
+      await systemProgram.state.rpc.withdraw(amountCollateral, {
+        accounts: {
+          userAccount: userSystemAccount.publicKey,
+          authority: mintAuthority,
+          collateralAccount: collateralAccount,
+          to: userCollateralTokenAccount,
+          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        },
+        instructions: [await updateAllFeeds(stateBefore, systemProgram)]
+      })
 
-  it('#widthdraw()', async () => {
-    const userAccount = new anchor.web3.Account()
-    const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
-    const amount = new anchor.BN(10)
-    await collateralToken.mintTo(collateralAccount, wallet, [], 10)
-    await systemProgram.state.rpc.withdraw(amount, {
-      accounts: {
-        authority: mintAuthority,
-        from: collateralAccount,
-        to: userCollateralTokenAccount,
-        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID
+      const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
+      assert.ok(info.amount.eq(amountCollateral))
+
+      const account = await systemProgram.account.userAccount(userSystemAccount.publicKey)
+      const stateAfter = await systemProgram.state()
+
+      assert.ok(account.collateral.eq(new anchor.BN(0)))
+      assert.ok(
+        stateBefore.collateralBalance.eq(stateAfter.collateralBalance.add(amountCollateral))
+      )
+    })
+    it('withdraw with debt', async () => {
+      const amountCollateral = new anchor.BN(100 * 1e8)
+      const mintAmount = new anchor.BN(10 * 1e8)
+      const { userSystemAccount, userCollateralTokenAccount } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: amountCollateral
+      })
+      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: mintAmount
+      })
+      const stateBefore = await systemProgram.state()
+      // we should be able to withdraw 75 tokens
+      const amountCollateralWithdraw = new anchor.BN(75 * 1e8)
+
+      await systemProgram.state.rpc.withdraw(amountCollateralWithdraw, {
+        accounts: {
+          userAccount: userSystemAccount.publicKey,
+          authority: mintAuthority,
+          collateralAccount: collateralAccount,
+          to: userCollateralTokenAccount,
+          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        },
+        instructions: [await updateAllFeeds(stateBefore, systemProgram)]
+      })
+
+      const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
+      assert.ok(info.amount.eq(amountCollateralWithdraw))
+
+      const account = await systemProgram.account.userAccount(userSystemAccount.publicKey)
+      const stateAfter = await systemProgram.state()
+
+      assert.ok(account.collateral.eq(amountCollateral.sub(amountCollateralWithdraw)))
+      assert.ok(
+        stateBefore.collateralBalance.eq(stateAfter.collateralBalance.add(amountCollateralWithdraw))
+      )
+    })
+    it('withdraw with debt over limit', async () => {
+      const amountCollateral = new anchor.BN(100 * 1e8)
+      const mintAmount = new anchor.BN(10 * 1e8)
+      const { userSystemAccount, userCollateralTokenAccount } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: amountCollateral
+      })
+      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: mintAmount
+      })
+      const stateBefore = await systemProgram.state()
+      // we should be able to withdraw 75 tokens
+      const amountCollateralWithdraw = new anchor.BN(76 * 1e8)
+      try {
+        await systemProgram.state.rpc.withdraw(amountCollateralWithdraw, {
+          accounts: {
+            userAccount: userSystemAccount.publicKey,
+            authority: mintAuthority,
+            collateralAccount: collateralAccount,
+            to: userCollateralTokenAccount,
+            tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+            clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+          },
+          instructions: [await updateAllFeeds(stateBefore, systemProgram)]
+        })
+      } catch (error) {
+        assert.ok(error.toString(), 'Not enough collateral')
       }
     })
-    const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
-    // console.log(info)
-    assert.ok(info.amount.eq(amount))
   })
 
   it('#createUserAccount()', async () => {

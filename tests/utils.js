@@ -49,7 +49,7 @@ const createAccountWithCollateral = async ({
       )
     ]
   })
-  return { userWallet, userSystemAccount: userAccount }
+  return { userWallet, userSystemAccount: userAccount, userCollateralTokenAccount }
 }
 const createPriceFeed = async ({
   oracleProgram,
@@ -68,6 +68,17 @@ const createPriceFeed = async ({
   })
   return collateralTokenFeed
 }
+const updateAllFeeds = async (state, systemProgram) => {
+  // first token is synthetic usd
+  for (let index = 1; index < state.assets.length; index++) {
+    await systemProgram.state.rpc.updatePrice(state.assets[index].feedAddress, {
+      accounts: {
+        priceFeedAccount: state.assets[index].feedAddress,
+        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+      }
+    })
+  }
+}
 const mintUsd = async ({
   systemProgram,
   mintAmount,
@@ -76,17 +87,6 @@ const mintUsd = async ({
   mintAuthority
 }) => {
   const state = await systemProgram.state()
-  const updateAllFeeds = async () => {
-    // first token is synthetic usd
-    for (let index = 1; index < state.assets.length; index++) {
-      await systemProgram.state.rpc.updatePrice(state.assets[index].feedAddress, {
-        accounts: {
-          priceFeedAccount: state.assets[index].feedAddress,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-        }
-      })
-    }
-  }
   await systemProgram.state.rpc.mint(mintAmount, {
     accounts: {
       authority: mintAuthority,
@@ -96,8 +96,14 @@ const mintUsd = async ({
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
       userAccount: userSystemAccount.publicKey
     },
-    instructions: [await updateAllFeeds()]
+    instructions: [await updateAllFeeds(state, systemProgram)]
   })
 }
 
-module.exports = { createToken, createAccountWithCollateral, createPriceFeed, mintUsd }
+module.exports = {
+  createToken,
+  createAccountWithCollateral,
+  createPriceFeed,
+  mintUsd,
+  updateAllFeeds
+}
