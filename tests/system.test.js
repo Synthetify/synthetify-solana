@@ -1,12 +1,14 @@
 const anchor = require('@project-serum/anchor')
 const assert = require('assert')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
+
 const {
   createToken,
   createAccountWithCollateral,
   createPriceFeed,
   mintUsd,
-  updateAllFeeds
+  updateAllFeeds,
+  tou64
 } = require('./utils')
 
 describe('system', () => {
@@ -89,7 +91,7 @@ describe('system', () => {
     assert.ok(account.owner.equals(userWallet.publicKey))
     const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
     const amount = new anchor.BN(10)
-    await collateralToken.mintTo(userCollateralTokenAccount, wallet, [], amount.toNumber())
+    await collateralToken.mintTo(userCollateralTokenAccount, wallet, [], tou64(amount))
 
     const userCollateralTokenAccountInfo = await collateralToken.getAccountInfo(
       userCollateralTokenAccount
@@ -106,7 +108,7 @@ describe('system', () => {
           collateralAccount,
           userAccount,
           [],
-          amount.toNumber()
+          tou64(amount.toString())
         )
       ]
     })

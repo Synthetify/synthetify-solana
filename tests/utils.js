@@ -1,4 +1,4 @@
-const { Token } = require('@solana/spl-token')
+const { Token, u64 } = require('@solana/spl-token')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
 const anchor = require('@project-serum/anchor')
 
@@ -32,7 +32,12 @@ const createAccountWithCollateral = async ({
     instructions: [await systemProgram.account.userAccount.createInstruction(userAccount)]
   })
   const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
-  await collateralToken.mintTo(userCollateralTokenAccount, mintAuthority, [], amount.toNumber())
+  await collateralToken.mintTo(
+    userCollateralTokenAccount,
+    mintAuthority,
+    [],
+    tou64(amount.toString())
+  )
 
   await systemProgram.state.rpc.deposit({
     accounts: {
@@ -45,7 +50,7 @@ const createAccountWithCollateral = async ({
         collateralAccount,
         userAccount,
         [],
-        amount.toNumber()
+        tou64(amount.toString())
       )
     ]
   })
@@ -99,11 +104,15 @@ const mintUsd = async ({
     instructions: [await updateAllFeeds(state, systemProgram)]
   })
 }
-
+const tou64 = (amount) => {
+  // eslint-disable-next-line new-cap
+  return new u64(amount.toString())
+}
 module.exports = {
   createToken,
   createAccountWithCollateral,
   createPriceFeed,
   mintUsd,
-  updateAllFeeds
+  updateAllFeeds,
+  tou64
 }
