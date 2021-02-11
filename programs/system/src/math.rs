@@ -69,8 +69,30 @@ pub fn calculate_new_shares(shares: &u64, debt: &u64, minted_amount_usd: &u64) -
 
     return new_shares;
 }
+pub fn calculate_burned_shares(
+    asset: &Asset,
+    user_debt: &u64,
+    user_shares: &u64,
+    amount: &u64,
+) -> u64 {
+    let burn_amount_in_usd = asset.price * amount
+        / 10u64.pow(
+            (asset.decimals + ORACLE_OFFSET - ACCURACCY)
+                .try_into()
+                .unwrap(),
+        );
+    let burned_shares = burn_amount_in_usd * user_shares / user_debt;
+    return burned_shares;
+}
+pub fn calculate_max_burned_in_token(asset: &Asset, user_debt: &u64) -> u64 {
+    let burned_amount_token =
+        *user_debt as u128 * 10u128.pow(ORACLE_OFFSET.into()) / asset.price as u128;
+    return burned_amount_token as u64;
+}
 #[cfg(test)]
 mod tests {
+    use std::ops::Div;
+
     use super::*;
     #[test]
     fn test_calculate_debt_success() {
@@ -220,5 +242,34 @@ mod tests {
             &collateralization_level,
         );
         assert_eq!(max_withdraw_in_usd, 50);
+    }
+    #[test]
+    fn test_calculate_burned_shares() {
+        let user_debt_in_usd = 100 * 10u64.pow(ACCURACCY.into());
+        let asset = Asset {
+            price: 1 * 10u64.pow(ORACLE_OFFSET.into()),
+            last_update: 100,
+            decimals: 8,
+            ..Default::default()
+        };
+        let user_shares = 10u64.pow(8u32);
+        let amount = 50 * 10u64.pow(asset.decimals as u32);
+        // each token cost 1 usd we burn 50% so we should burn 50% shares
+        let burned_shares =
+            calculate_burned_shares(&asset, &user_debt_in_usd, &user_shares, &amount);
+        assert_eq!(burned_shares, user_shares.div(2u64));
+    }
+    #[test]
+    fn test_calculate_max_burned_in_token() {
+        let user_debt_in_usd = 100 * 10u64.pow(ACCURACCY.into());
+        let asset = Asset {
+            price: 2 * 10u64.pow(ORACLE_OFFSET.into()),
+            last_update: 100,
+            decimals: 8,
+            ..Default::default()
+        };
+        // Our debt = 100 usd each token cost 2 so we burn 50 tokens
+        let amount_to_burn = calculate_max_burned_in_token(&asset, &user_debt_in_usd);
+        assert_eq!(amount_to_burn, 50 * 10u64.pow(asset.decimals.into()));
     }
 }

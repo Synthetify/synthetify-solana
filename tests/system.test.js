@@ -1,6 +1,8 @@
+/* eslint-disable new-cap */
 const anchor = require('@project-serum/anchor')
 const assert = require('assert')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
+const { u64 } = require('@solana/spl-token')
 
 const {
   createToken,
@@ -397,6 +399,143 @@ describe('system', () => {
       } catch (error) {
         assert.ok(error.toString(), 'Not enough collateral')
       }
+    })
+  })
+  describe('#burn()', () => {
+    it('burn full', async () => {
+      const mintAmount = new u64(1e8)
+      const stateBefore = await systemProgram.state()
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: new anchor.BN(100 * 1e8)
+      })
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: mintAmount
+      })
+
+      await syntheticUsd.approve(userTokenAccount, mintAuthority, userWallet, [], mintAmount)
+      await systemProgram.state.rpc.burn(mintAmount, {
+        accounts: {
+          authority: mintAuthority,
+          mint: syntheticUsd.publicKey,
+          userAccount: userSystemAccount.publicKey,
+          userTokenAccount: userTokenAccount,
+          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        }
+      })
+      const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
+      const stateAfter = await systemProgram.state()
+      const systemAccountAfter = await systemProgram.account.userAccount(
+        userSystemAccount.publicKey
+      )
+      assert.ok(stateAfter.shares.eq(stateBefore.shares))
+      assert.ok(stateAfter.assets[0].supply.eq(stateBefore.assets[0].supply))
+      assert.ok(systemAccountAfter.shares.eq(new u64(0)))
+      assert.ok(accountAfter.amount.eq(new u64(0)))
+    })
+    it('burn partial', async () => {
+      const mintAmount = new u64(1e8)
+      const burnAmount = mintAmount.div(new u64(5))
+      const initialShares = new u64(1e8)
+      const stateBefore = await systemProgram.state()
+
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: new anchor.BN(100 * 1e8)
+      })
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: mintAmount
+      })
+      await syntheticUsd.approve(userTokenAccount, mintAuthority, userWallet, [], tou64(burnAmount))
+      await systemProgram.state.rpc.burn(burnAmount, {
+        accounts: {
+          authority: mintAuthority,
+          mint: syntheticUsd.publicKey,
+          userAccount: userSystemAccount.publicKey,
+          userTokenAccount: userTokenAccount,
+          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        }
+      })
+      const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
+      const stateAfter = await systemProgram.state()
+      const systemAccountAfter = await systemProgram.account.userAccount(
+        userSystemAccount.publicKey
+      )
+      assert.ok(
+        stateAfter.assets[0].supply.eq(stateBefore.assets[0].supply.add(mintAmount.sub(burnAmount)))
+      )
+      assert.ok(accountAfter.amount.eq(mintAmount.sub(burnAmount)))
+
+      // we burn 1/5 of shares
+      assert.ok(
+        systemAccountAfter.shares.eq(initialShares.sub(initialShares.div(new anchor.BN(5))))
+      )
+      assert.ok(
+        stateAfter.shares.eq(
+          stateBefore.shares.add(initialShares.sub(initialShares.div(new anchor.BN(5))))
+        )
+      )
+    })
+    it('burn over limit', async () => {
+      const stateBefore = await systemProgram.state()
+
+      const mintAmount = new u64(1e8)
+      const burnAmount = mintAmount.mul(new anchor.BN(2))
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: new anchor.BN(100 * 1e8)
+      })
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount,
+        mintAuthority,
+        mintAmount: mintAmount
+      })
+
+      await syntheticUsd.approve(userTokenAccount, mintAuthority, userWallet, [], tou64(burnAmount))
+      await systemProgram.state.rpc.burn(burnAmount, {
+        accounts: {
+          authority: mintAuthority,
+          mint: syntheticUsd.publicKey,
+          userAccount: userSystemAccount.publicKey,
+          userTokenAccount: userTokenAccount,
+          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        }
+      })
+      const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
+      const stateAfter = await systemProgram.state()
+      const systemAccountAfter = await systemProgram.account.userAccount(
+        userSystemAccount.publicKey
+      )
+      assert.ok(stateAfter.assets[0].supply.eq(stateBefore.assets[0].supply))
+      assert.ok(accountAfter.amount.eq(new anchor.BN(0)))
+
+      assert.ok(systemAccountAfter.shares.eq(new anchor.BN(0)))
+      assert.ok(stateAfter.shares.eq(stateBefore.shares))
     })
   })
 

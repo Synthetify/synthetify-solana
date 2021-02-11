@@ -53,7 +53,6 @@ pub mod system {
             collateral_token_feed: Pubkey,
             usd_token: Pubkey,
         ) -> Result<()> {
-            let seeds = &[signer.as_ref(), &[nonce]];
             self.initialized = true;
             self.signer = signer;
             self.nonce = nonce;
@@ -63,7 +62,7 @@ pub mod system {
             let usd_asset = Asset {
                 decimals: 8,
                 asset_address: usd_token,
-                feed_address: usd_token, // unused
+                feed_address: Pubkey::default(), // unused
                 last_update: std::u64::MAX,
                 price: 1 * 10u64.pow(4),
                 supply: 0,
@@ -207,6 +206,44 @@ pub mod system {
             asset.last_update = slot;
             Ok(())
         }
+        pub fn burn(&mut self, ctx: Context<BurnToken>, amount: u64) -> Result<()> {
+            let user_account = &mut ctx.accounts.user_account;
+            let token_address = ctx.accounts.mint.key;
+            let slot = ctx.accounts.clock.slot;
+            let debt = calculate_debt(&self.assets, slot, self.max_delay).unwrap();
+            let burn_asset = self
+                .assets
+                .iter_mut()
+                .find(|x| x.asset_address == *token_address)
+                .unwrap();
+
+            let user_debt = calculate_user_debt_in_usd(user_account, debt, self.shares);
+
+            let burned_shares =
+                calculate_burned_shares(&burn_asset, &user_debt, &user_account.shares, &amount);
+            // msg!("Burned shares {}", burned_shares);
+            // msg!("User shares {}", user_account.shares);
+            if burned_shares > user_account.shares {
+                let burned_amount = calculate_max_burned_in_token(burn_asset, &user_debt);
+                burn_asset.supply -= burned_amount;
+                self.shares -= user_account.shares;
+                user_account.shares = 0;
+                let seeds = &[self.signer.as_ref(), &[self.nonce]];
+                let signer = &[&seeds[..]];
+                let cpi_ctx = CpiContext::from(&*ctx.accounts).with_signer(signer);
+                token::burn(cpi_ctx, burned_amount);
+                Ok(())
+            } else {
+                burn_asset.supply -= amount;
+                user_account.shares -= burned_shares;
+                self.shares -= burned_shares;
+                let seeds = &[self.signer.as_ref(), &[self.nonce]];
+                let signer = &[&seeds[..]];
+                let cpi_ctx = CpiContext::from(&*ctx.accounts).with_signer(signer);
+                token::burn(cpi_ctx, amount);
+                Ok(())
+            }
+        }
     }
     pub fn create_user_account(ctx: Context<CreateUserAccount>, owner: Pubkey) -> ProgramResult {
         let user_account = &mut ctx.accounts.user_account;
@@ -249,6 +286,29 @@ impl<'a, 'b, 'c, 'info> From<&Mint<'info>> for CpiContext<'a, 'b, 'c, 'info, Min
         let cpi_accounts = MintTo {
             mint: accounts.mint.to_account_info(),
             to: accounts.to.to_account_info(),
+            authority: accounts.authority.to_account_info(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+#[derive(Accounts)]
+pub struct BurnToken<'info> {
+    pub authority: AccountInfo<'info>,
+    #[account(mut)]
+    pub mint: AccountInfo<'info>,
+    pub token_program: AccountInfo<'info>,
+    #[account(mut)]
+    pub user_token_account: AccountInfo<'info>,
+    #[account(mut)]
+    pub user_account: ProgramAccount<'info, UserAccount>,
+    pub clock: Sysvar<'info, Clock>,
+}
+impl<'a, 'b, 'c, 'info> From<&BurnToken<'info>> for CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
+    fn from(accounts: &BurnToken<'info>) -> CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
+        let cpi_accounts = Burn {
+            mint: accounts.mint.to_account_info(),
+            to: accounts.user_token_account.to_account_info(),
             authority: accounts.authority.to_account_info(),
         };
         let cpi_program = accounts.token_program.to_account_info();
