@@ -5,6 +5,10 @@ use crate::*;
 // Maybe is should be part of Asset ?
 const ACCURACCY: u8 = 8;
 const ORACLE_OFFSET: u8 = 4;
+
+// Switch to u128? Reduce decimals for tokens ? 
+// At least rust will error during overflows checkmate Solidity
+
 // USD prices have 8 decimal places
 pub fn calculate_debt(assets: &Vec<Asset>, slot: u64, max_delay: u32) -> Result<u64> {
     let mut debt = 0u64;
