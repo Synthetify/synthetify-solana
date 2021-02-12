@@ -92,6 +92,7 @@ const mintUsd = async ({
   mintAuthority
 }) => {
   const state = await systemProgram.state()
+
   await systemProgram.state.rpc.mint(mintAmount, {
     accounts: {
       authority: mintAuthority,

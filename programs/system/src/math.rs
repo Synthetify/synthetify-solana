@@ -6,7 +6,7 @@ use crate::*;
 const ACCURACCY: u8 = 8;
 const ORACLE_OFFSET: u8 = 4;
 
-// Switch to u128? Reduce decimals for tokens ? 
+// Switch to u128? Reduce decimals for tokens ?
 // At least rust will error during overflows checkmate Solidity
 
 // USD prices have 8 decimal places
@@ -92,6 +92,19 @@ pub fn calculate_max_burned_in_token(asset: &Asset, user_debt: &u64) -> u64 {
     let burned_amount_token =
         *user_debt as u128 * 10u128.pow(ORACLE_OFFSET.into()) / asset.price as u128;
     return burned_amount_token as u64;
+}
+
+pub fn calculate_swap_out_amount(
+    asset_in: &Asset,
+    asset_for: &Asset,
+    amount: &u64,
+    fee: &u8, // in range from 0-99 | 30/10000 => 0.3% fee
+) -> u64 {
+    // Assume same amount of decimals
+    // TODO: Fix that for future
+    let amount_before_fee = asset_in.price * amount / asset_for.price;
+    let amount = amount_before_fee - (amount_before_fee * *fee as u64 / 10000);
+    return amount;
 }
 #[cfg(test)]
 mod tests {
@@ -275,5 +288,34 @@ mod tests {
         // Our debt = 100 usd each token cost 2 so we burn 50 tokens
         let amount_to_burn = calculate_max_burned_in_token(&asset, &user_debt_in_usd);
         assert_eq!(amount_to_burn, 50 * 10u64.pow(asset.decimals.into()));
+    }
+    #[test]
+    fn test_calculate_swap_out_amount() {
+        let amount_in = 1000 * 10u64.pow(ACCURACCY.into());
+        let fee = 30u8;
+        let asset_in = Asset {
+            price: 1 * 10u64.pow(ORACLE_OFFSET.into()),
+            last_update: 100,
+            decimals: 8,
+            ..Default::default()
+        };
+        let asset_for = Asset {
+            price: 1 * 10u64.pow(ORACLE_OFFSET.into()),
+            last_update: 100,
+            decimals: 8,
+            ..Default::default()
+        };
+        let asset_for_2 = Asset {
+            price: 2 * 10u64.pow(ORACLE_OFFSET.into()),
+            last_update: 100,
+            decimals: 8,
+            ..Default::default()
+        };
+        // Test on tokens with same price
+        let amount = calculate_swap_out_amount(&asset_in, &asset_for, &amount_in, &fee);
+        assert_eq!(amount, 997 * 10u64.pow(ACCURACCY.into()));
+        // Test on tokens with different price
+        let amount = calculate_swap_out_amount(&asset_in, &asset_for_2, &amount_in, &fee);
+        assert_eq!(amount, 4985 * 10u64.pow(ACCURACCY.into()) / 10);
     }
 }

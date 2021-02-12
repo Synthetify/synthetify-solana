@@ -21,6 +21,7 @@ pub mod system {
         pub collateral_account: Pubkey,
         pub collateralization_level: u32,
         pub max_delay: u32,
+        pub fee: u8, // should be in range 0-99
         pub assets: Vec<Asset>,
     }
 
@@ -38,6 +39,7 @@ pub mod system {
                 collateral_balance: 0,
                 collateralization_level: 500, // 500%
                 max_delay: 1000,
+                fee: 30, // 0.3%
                 collateral_token: Pubkey::default(),
                 collateral_account: Pubkey::default(),
                 assets,
@@ -175,7 +177,7 @@ pub mod system {
                 price: 0,
                 supply: 0,
                 last_update: 0,
-                decimals: 0,
+                decimals: 8,
             };
             self.assets.push(new_asset);
             Ok(())
@@ -244,6 +246,49 @@ pub mod system {
                 Ok(())
             }
         }
+        pub fn swap(&mut self, ctx: Context<Swap>, amount: u64) -> Result<()> {
+            let user_account = &mut ctx.accounts.user_account;
+            // We allow washtrading
+            let token_address_in = ctx.accounts.token_in.key;
+            let token_address_for = ctx.accounts.token_for.key;
+            let slot = ctx.accounts.clock.slot;
+
+            if token_address_for.eq(&self.assets[1].asset_address) {
+                return Err(ErrorCode::SyntheticCollateral.into());
+            }
+            let asset_in_index = self
+                .assets
+                .iter()
+                .position(|x| x.asset_address == *token_address_in)
+                .unwrap();
+            let asset_for_index = self
+                .assets
+                .iter()
+                .position(|x| x.asset_address == *token_address_for)
+                .unwrap();
+            if (self.assets[asset_in_index].last_update + self.max_delay as u64) < slot
+                || (self.assets[asset_for_index].last_update + self.max_delay as u64) < slot
+            {
+                return Err(ErrorCode::OutdatedOracle.into());
+            }
+            let amount_for = calculate_swap_out_amount(
+                &self.assets[asset_in_index],
+                &self.assets[asset_for_index],
+                &amount,
+                &self.fee,
+            );
+            let seeds = &[self.signer.as_ref(), &[self.nonce]];
+            let signer = &[&seeds[..]];
+
+            let cpi_ctx_burn: CpiContext<Burn> =
+                CpiContext::from(&*ctx.accounts).with_signer(signer);
+            token::burn(cpi_ctx_burn, amount);
+
+            let cpi_ctx_mint: CpiContext<MintTo> =
+                CpiContext::from(&*ctx.accounts).with_signer(signer);
+            token::mint_to(cpi_ctx_mint, amount_for);
+            Ok(())
+        }
     }
     pub fn create_user_account(ctx: Context<CreateUserAccount>, owner: Pubkey) -> ProgramResult {
         let user_account = &mut ctx.accounts.user_account;
@@ -309,6 +354,44 @@ impl<'a, 'b, 'c, 'info> From<&BurnToken<'info>> for CpiContext<'a, 'b, 'c, 'info
         let cpi_accounts = Burn {
             mint: accounts.mint.to_account_info(),
             to: accounts.user_token_account.to_account_info(),
+            authority: accounts.authority.to_account_info(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+#[derive(Accounts)]
+pub struct Swap<'info> {
+    pub authority: AccountInfo<'info>,
+    pub token_program: AccountInfo<'info>,
+    #[account(mut)]
+    pub token_in: AccountInfo<'info>,
+    #[account(mut)]
+    pub token_for: AccountInfo<'info>,
+    #[account(mut)]
+    pub user_token_account_in: AccountInfo<'info>,
+    #[account(mut)]
+    pub user_token_account_for: AccountInfo<'info>,
+    #[account(mut)]
+    pub user_account: ProgramAccount<'info, UserAccount>,
+    pub clock: Sysvar<'info, Clock>,
+}
+impl<'a, 'b, 'c, 'info> From<&Swap<'info>> for CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
+    fn from(accounts: &Swap<'info>) -> CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
+        let cpi_accounts = Burn {
+            mint: accounts.token_in.to_account_info(),
+            to: accounts.user_token_account_in.to_account_info(),
+            authority: accounts.authority.to_account_info(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+impl<'a, 'b, 'c, 'info> From<&Swap<'info>> for CpiContext<'a, 'b, 'c, 'info, MintTo<'info>> {
+    fn from(accounts: &Swap<'info>) -> CpiContext<'a, 'b, 'c, 'info, MintTo<'info>> {
+        let cpi_accounts = MintTo {
+            mint: accounts.token_for.to_account_info(),
+            to: accounts.user_token_account_for.to_account_info(),
             authority: accounts.authority.to_account_info(),
         };
         let cpi_program = accounts.token_program.to_account_info();
@@ -385,4 +468,6 @@ pub enum ErrorCode {
     NotSyntheticUsd,
     #[msg("Not enough collateral")]
     WithdrawError,
+    #[msg("Synthetic collateral is not supported")]
+    SyntheticCollateral,
 }

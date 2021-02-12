@@ -269,21 +269,6 @@ describe('system', () => {
     })
   })
 
-  // commented out for now we deploy on single instance and messes with other tests
-  // it('#addAsset()', async () => {
-  //   const newToken = await createToken({ connection, mintAuthority, wallet })
-  //   // TODO: Create and Add price feed to this new token
-  //   await systemProgram.state.rpc.addAsset({
-  //     accounts: {
-  //       assetAddress: newToken.publicKey,
-  //       feedAddress: newToken.publicKey
-  //     }
-  //   })
-  //   const state = await systemProgram.state()
-  //   assert.ok(state.assets.length === 3)
-  //   assert.ok(state.assets[2].feedAddress.equals(newToken.publicKey))
-  //   assert.ok(state.assets[2].assetAddress.equals(newToken.publicKey))
-  // })
   describe('#widthdraw()', () => {
     it('withdraw with zero debt', async () => {
       const amountCollateral = new anchor.BN(100 * 1e8)
@@ -538,7 +523,69 @@ describe('system', () => {
       assert.ok(stateAfter.shares.eq(stateBefore.shares))
     })
   })
+  describe('#swap(', () => {
+    it('swaps synthetic usd to other token', async () => {
+      const tokenPrice = new anchor.BN(2 * 1e4)
+      const mintedSyntheticUsd = new anchor.BN(100 * 1e8)
+      const newToken = await createToken({ connection, mintAuthority, wallet })
+      const tokenFeed = await createPriceFeed({ admin, oracleProgram, tokenPrice })
 
+      // TODO: Create and Add price feed to this new token
+      await systemProgram.state.rpc.addAsset({
+        accounts: {
+          assetAddress: newToken.publicKey,
+          feedAddress: tokenFeed.publicKey
+        }
+      })
+      const state = await systemProgram.state()
+      assert.ok(state.assets.length === 3)
+      assert.ok(state.assets[2].feedAddress.equals(tokenFeed.publicKey))
+      assert.ok(state.assets[2].assetAddress.equals(newToken.publicKey))
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
+        collateralAccount,
+        collateralToken,
+        mintAuthority: wallet,
+        systemProgram,
+        amount: new anchor.BN(10000 * 1e8)
+      })
+      const userSyntheticUsdAccount = await syntheticUsd.createAccount(userWallet.publicKey)
+      const userNewTokenAccount = await newToken.createAccount(userWallet.publicKey)
+      const stateUpdated = await systemProgram.state()
+
+      await mintUsd({
+        systemProgram,
+        userSystemAccount,
+        userTokenAccount: userSyntheticUsdAccount,
+        mintAuthority,
+        mintAmount: mintedSyntheticUsd
+      })
+      await syntheticUsd.approve(
+        userSyntheticUsdAccount,
+        mintAuthority,
+        userWallet,
+        [],
+        tou64(mintedSyntheticUsd)
+      )
+
+      await systemProgram.state.rpc.swap(mintedSyntheticUsd, {
+        accounts: {
+          userAccount: userSystemAccount.publicKey,
+          authority: mintAuthority,
+          tokenIn: syntheticUsd.publicKey,
+          tokenFor: newToken.publicKey,
+          userTokenAccountIn: userSyntheticUsdAccount,
+          userTokenAccountFor: userNewTokenAccount,
+          tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        },
+        instructions: [await updateAllFeeds(stateUpdated, systemProgram)]
+      })
+      const accountUsd = await syntheticUsd.getAccountInfo(userSyntheticUsdAccount)
+      const accountNewToken = await newToken.getAccountInfo(userNewTokenAccount)
+      assert.ok(accountUsd.amount.eq(new anchor.BN(0)))
+      assert.ok(accountNewToken.amount.eq(new anchor.BN('4985000000')))
+    })
+  })
   it('#createUserAccount()', async () => {
     const userWallet = new anchor.web3.Account()
     const userAccount = new anchor.web3.Account()
