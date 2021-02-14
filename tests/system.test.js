@@ -139,15 +139,16 @@ describe('system', () => {
     const firstMintAmount = new anchor.BN(1 * 1e8)
     const firstMintShares = new anchor.BN(1 * 1e8)
     it('1st mint', async () => {
-      const { userSystemAccount } = await createAccountWithCollateral({
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
         systemProgram,
         amount: new anchor.BN(100 * 1e8)
       })
-      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -162,7 +163,7 @@ describe('system', () => {
       assert.ok(state.shares.eq(firstMintShares)) // Its first mint so shares will be 1e8
     })
     it('2nd mint', async () => {
-      const { userSystemAccount } = await createAccountWithCollateral({
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
@@ -173,6 +174,7 @@ describe('system', () => {
       const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
       // We mint same amount
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -188,7 +190,7 @@ describe('system', () => {
     })
     it('3rd mint', async () => {
       const mintAmount = firstMintAmount.div(new anchor.BN(3)) // Mint 1/3
-      const { userSystemAccount } = await createAccountWithCollateral({
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
@@ -198,6 +200,7 @@ describe('system', () => {
       const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
       // We mint same amount
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -228,6 +231,7 @@ describe('system', () => {
       try {
         await systemProgram.state.rpc.mint(new anchor.BN(1), {
           accounts: {
+            owner: userWallet.publicKey,
             authority: mintAuthority,
             mint: collateralToken.publicKey,
             to: userTokenAccount,
@@ -235,6 +239,7 @@ describe('system', () => {
             clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
             userAccount: userSystemAccount.publicKey
           },
+          signers: [userWallet],
           instructions: await updateAllFeeds(stateBefore, systemProgram)
         })
         assert.ok(false)
@@ -253,6 +258,7 @@ describe('system', () => {
       const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       try {
         await mintUsd({
+          userWallet,
           systemProgram,
           userSystemAccount,
           userTokenAccount,
@@ -316,6 +322,7 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -365,6 +372,7 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -404,6 +412,7 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -447,6 +456,7 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -498,6 +508,7 @@ describe('system', () => {
       })
       const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount,
@@ -558,6 +569,7 @@ describe('system', () => {
       const stateUpdated = await systemProgram.state()
 
       await mintUsd({
+        userWallet,
         systemProgram,
         userSystemAccount,
         userTokenAccount: userSyntheticUsdAccount,

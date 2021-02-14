@@ -1,7 +1,6 @@
 const { Token, u64 } = require('@solana/spl-token')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
 const anchor = require('@project-serum/anchor')
-const { Transaction, sendAndConfirmTransaction } = require('@solana/web3.js')
 const createToken = async ({ connection, wallet, mintAuthority }) => {
   const token = await Token.createMint(
     connection,
@@ -91,6 +90,7 @@ const updateAllFeeds = async (state, systemProgram) => {
   return transactions
 }
 const mintUsd = async ({
+  userWallet,
   systemProgram,
   mintAmount,
   userSystemAccount,
@@ -106,8 +106,10 @@ const mintUsd = async ({
       to: userTokenAccount,
       tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-      userAccount: userSystemAccount.publicKey
+      userAccount: userSystemAccount.publicKey,
+      owner: userWallet.publicKey
     },
+    signers: [userWallet],
     instructions: updateAllFeedsTxs
   })
 }

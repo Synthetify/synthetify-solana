@@ -323,9 +323,11 @@ pub struct Mint<'info> {
     #[account(mut)]
     pub to: AccountInfo<'info>,
     pub token_program: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, has_one = owner)]
     pub user_account: ProgramAccount<'info, UserAccount>,
     pub clock: Sysvar<'info, Clock>,
+    #[account(signer)]
+    owner: AccountInfo<'info>,
 }
 impl<'a, 'b, 'c, 'info> From<&Mint<'info>> for CpiContext<'a, 'b, 'c, 'info, MintTo<'info>> {
     fn from(accounts: &Mint<'info>) -> CpiContext<'a, 'b, 'c, 'info, MintTo<'info>> {
