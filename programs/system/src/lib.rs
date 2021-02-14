@@ -13,6 +13,7 @@ pub mod system {
     pub struct InternalState {
         pub nonce: u8,
         pub signer: Pubkey,
+        pub admin: Pubkey,
         pub initialized: bool,
         pub debt: u64,
         pub shares: u64,
@@ -33,6 +34,7 @@ pub mod system {
             Ok(Self {
                 nonce: 0,
                 signer: Pubkey::default(),
+                admin: Pubkey::default(),
                 initialized: false,
                 debt: 0,
                 shares: 0,
@@ -50,6 +52,7 @@ pub mod system {
             ctx: Context<Initialize>,
             nonce: u8,
             signer: Pubkey,
+            admin: Pubkey,
             collateral_token: Pubkey,
             collateral_account: Pubkey,
             collateral_token_feed: Pubkey,
@@ -58,6 +61,7 @@ pub mod system {
             self.initialized = true;
             self.signer = signer;
             self.nonce = nonce;
+            self.admin = admin;
             self.collateral_token = collateral_token;
             self.collateral_account = collateral_account;
             //clean asset array + add synthetic Usd
@@ -166,7 +170,11 @@ pub mod system {
             token::transfer(cpi_ctx, amount);
             Ok(())
         }
+
         pub fn add_asset(&mut self, ctx: Context<AddAsset>) -> Result<()> {
+            if !self.admin.eq(ctx.accounts.admin.key){
+                return Err(ErrorCode::Unauthorized.into());
+            }
             if self.assets.len() == Self::ASSETS_SIZE {
                 return Err(ErrorCode::AssetsFull.into());
             }
@@ -435,6 +443,8 @@ impl<'a, 'b, 'c, 'info> From<&Withdraw<'info>> for CpiContext<'a, 'b, 'c, 'info,
 pub struct AddAsset<'info> {
     pub asset_address: AccountInfo<'info>,
     pub feed_address: AccountInfo<'info>,
+    #[account(signer)]
+    pub admin: AccountInfo<'info>,
 }
 #[derive(Accounts)]
 pub struct Deposit<'info> {
@@ -481,4 +491,6 @@ pub enum ErrorCode {
     WithdrawError,
     #[msg("Synthetic collateral is not supported")]
     SyntheticCollateral,
+    #[msg("You are not admin of system")]
+    Unauthorized,
 }

@@ -48,6 +48,7 @@ describe('system', () => {
     await systemProgram.state.rpc.initialize(
       _nonce,
       signer.publicKey,
+      wallet.publicKey,
       collateralToken.publicKey,
       collateralAccount,
       collateralTokenFeed.publicKey,
@@ -566,8 +567,10 @@ describe('system', () => {
       await systemProgram.state.rpc.addAsset({
         accounts: {
           assetAddress: newToken.publicKey,
-          feedAddress: tokenFeed.publicKey
-        }
+          feedAddress: tokenFeed.publicKey,
+          admin: wallet.publicKey
+        },
+        signer: [wallet]
       })
       const state = await systemProgram.state()
       assert.ok(state.assets.length === 3)
