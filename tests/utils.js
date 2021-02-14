@@ -1,7 +1,7 @@
 const { Token, u64 } = require('@solana/spl-token')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
 const anchor = require('@project-serum/anchor')
-
+const { Transaction, sendAndConfirmTransaction } = require('@solana/web3.js')
 const createToken = async ({ connection, wallet, mintAuthority }) => {
   const token = await Token.createMint(
     connection,
@@ -20,7 +20,7 @@ const createAccountWithCollateral = async ({
   collateralAccount,
   amount = new anchor.BN(100 * 1e8)
 }) => {
-  const userWallet = new anchor.web3.Account()
+  const userWallet = await newAccountWithLamports(systemProgram.provider.connection)
   const userAccount = new anchor.web3.Account()
   await systemProgram.rpc.createUserAccount(userWallet.publicKey, {
     accounts: {
@@ -31,7 +31,7 @@ const createAccountWithCollateral = async ({
     // Auto allocate memory
     instructions: [await systemProgram.account.userAccount.createInstruction(userAccount)]
   })
-  const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
+  const userCollateralTokenAccount = await collateralToken.createAccount(userWallet.publicKey)
   await collateralToken.mintTo(
     userCollateralTokenAccount,
     mintAuthority,
@@ -39,21 +39,29 @@ const createAccountWithCollateral = async ({
     tou64(amount.toString())
   )
 
-  await systemProgram.state.rpc.deposit({
+  const depositTx = await systemProgram.state.instruction.deposit({
     accounts: {
       userAccount: userAccount.publicKey,
       collateralAccount: collateralAccount
-    },
-    instructions: [
-      await collateralToken.transfer(
+    }
+  })
+  const transaction = new Transaction()
+    .add(
+      Token.createTransferInstruction(
+        collateralToken.programId,
         userCollateralTokenAccount,
         collateralAccount,
-        userAccount,
+        userWallet.publicKey,
         [],
         tou64(amount.toString())
       )
-    ]
+    )
+    .add(depositTx)
+  await sendAndConfirmTransaction(systemProgram.provider.connection, transaction, [userWallet], {
+    preflightCommitment: 'recent',
+    commitment: 'recent'
   })
+
   return { userWallet, userSystemAccount: userAccount, userCollateralTokenAccount }
 }
 const createPriceFeed = async ({
@@ -109,6 +117,27 @@ const tou64 = (amount) => {
   // eslint-disable-next-line new-cap
   return new u64(amount.toString())
 }
+async function newAccountWithLamports(connection, lamports = 1e11) {
+  const account = new anchor.web3.Account()
+
+  let retries = 30
+  await connection.requestAirdrop(account.publicKey, lamports)
+  for (;;) {
+    await sleep(500)
+    if (lamports == (await connection.getBalance(account.publicKey))) {
+      return account
+    }
+    if (--retries <= 0) {
+      break
+    }
+  }
+  throw new Error(`Airdrop of ${lamports} failed`)
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 module.exports = {
   createToken,
   createAccountWithCollateral,

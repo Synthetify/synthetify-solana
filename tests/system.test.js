@@ -132,10 +132,10 @@ describe('system', () => {
     // collateral will always have index 1
     assert.ok(state.assets[1].price.eq(initPrice))
   })
-  describe('#mint()', () => {
+  describe.only('#mint()', () => {
     const firstMintAmount = new anchor.BN(1 * 1e8)
     const firstMintShares = new anchor.BN(1 * 1e8)
-    it('1st mint', async () => {
+    it.only('1st mint', async () => {
       const { userSystemAccount } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
