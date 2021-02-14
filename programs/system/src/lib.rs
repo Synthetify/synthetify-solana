@@ -377,9 +377,11 @@ pub struct Swap<'info> {
     pub user_token_account_in: AccountInfo<'info>,
     #[account(mut)]
     pub user_token_account_for: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, has_one = owner)]
     pub user_account: ProgramAccount<'info, UserAccount>,
     pub clock: Sysvar<'info, Clock>,
+    #[account(signer)]
+    owner: AccountInfo<'info>,
 }
 impl<'a, 'b, 'c, 'info> From<&Swap<'info>> for CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
     fn from(accounts: &Swap<'info>) -> CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
@@ -406,7 +408,7 @@ impl<'a, 'b, 'c, 'info> From<&Swap<'info>> for CpiContext<'a, 'b, 'c, 'info, Min
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = owner)]
     pub user_account: ProgramAccount<'info, UserAccount>,
     pub authority: AccountInfo<'info>,
     #[account(mut)]
@@ -415,6 +417,8 @@ pub struct Withdraw<'info> {
     pub to: AccountInfo<'info>,
     pub token_program: AccountInfo<'info>,
     pub clock: Sysvar<'info, Clock>,
+    #[account(signer)]
+    owner: AccountInfo<'info>,
 }
 impl<'a, 'b, 'c, 'info> From<&Withdraw<'info>> for CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
     fn from(accounts: &Withdraw<'info>) -> CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {

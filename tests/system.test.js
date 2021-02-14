@@ -275,7 +275,11 @@ describe('system', () => {
   describe('#widthdraw()', () => {
     it('withdraw with zero debt', async () => {
       const amountCollateral = new anchor.BN(100 * 1e8)
-      const { userSystemAccount, userCollateralTokenAccount } = await createAccountWithCollateral({
+      const {
+        userSystemAccount,
+        userCollateralTokenAccount,
+        userWallet
+      } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
@@ -290,8 +294,10 @@ describe('system', () => {
           collateralAccount: collateralAccount,
           to: userCollateralTokenAccount,
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          owner: userWallet.publicKey
         },
+        signers: [userWallet],
         instructions: await updateAllFeeds(stateBefore, systemProgram)
       })
 
@@ -340,8 +346,10 @@ describe('system', () => {
           collateralAccount: collateralAccount,
           to: userCollateralTokenAccount,
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          owner: userWallet.publicKey
         },
+        signers: [userWallet],
         instructions: await updateAllFeeds(stateBefore, systemProgram)
       })
 
@@ -390,8 +398,10 @@ describe('system', () => {
             collateralAccount: collateralAccount,
             to: userCollateralTokenAccount,
             tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-            clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+            clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+            owner: userWallet.publicKey
           },
+          signers: [userWallet],
           instructions: await updateAllFeeds(stateBefore, systemProgram)
         })
       } catch (error) {
@@ -599,8 +609,10 @@ describe('system', () => {
           userTokenAccountIn: userSyntheticUsdAccount,
           userTokenAccountFor: userNewTokenAccount,
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          owner: userWallet.publicKey
         },
+        signers: [userWallet],
         instructions: await updateAllFeeds(stateUpdated, systemProgram)
       })
       const accountUsd = await syntheticUsd.getAccountInfo(userSyntheticUsdAccount)
