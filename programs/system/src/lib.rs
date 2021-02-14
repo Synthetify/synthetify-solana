@@ -348,9 +348,11 @@ pub struct BurnToken<'info> {
     pub token_program: AccountInfo<'info>,
     #[account(mut)]
     pub user_token_account: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, has_one = owner)]
     pub user_account: ProgramAccount<'info, UserAccount>,
     pub clock: Sysvar<'info, Clock>,
+    #[account(signer)]
+    owner: AccountInfo<'info>,
 }
 impl<'a, 'b, 'c, 'info> From<&BurnToken<'info>> for CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {
     fn from(accounts: &BurnToken<'info>) -> CpiContext<'a, 'b, 'c, 'info, Burn<'info>> {

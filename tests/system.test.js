@@ -428,8 +428,10 @@ describe('system', () => {
           userAccount: userSystemAccount.publicKey,
           userTokenAccount: userTokenAccount,
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-        }
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          owner: userWallet.publicKey
+        },
+        signers: [userWallet]
       })
       const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
       const stateAfter = await systemProgram.state()
@@ -471,8 +473,10 @@ describe('system', () => {
           userAccount: userSystemAccount.publicKey,
           userTokenAccount: userTokenAccount,
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-        }
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          owner: userWallet.publicKey
+        },
+        signers: [userWallet]
       })
       const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
       const stateAfter = await systemProgram.state()
@@ -524,8 +528,10 @@ describe('system', () => {
           userAccount: userSystemAccount.publicKey,
           userTokenAccount: userTokenAccount,
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-        }
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          owner: userWallet.publicKey
+        },
+        signers: [userWallet]
       })
       const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
       const stateAfter = await systemProgram.state()
