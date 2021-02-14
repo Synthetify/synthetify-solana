@@ -2,7 +2,7 @@
 const anchor = require('@project-serum/anchor')
 const assert = require('assert')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
-const { u64 } = require('@solana/spl-token')
+const { u64, Token } = require('@solana/spl-token')
 
 const {
   createToken,
@@ -10,7 +10,8 @@ const {
   createPriceFeed,
   mintUsd,
   updateAllFeeds,
-  tou64
+  tou64,
+  newAccountWithLamports
 } = require('./utils')
 
 describe('system', () => {
@@ -76,7 +77,7 @@ describe('system', () => {
     assert.ok(collateralAccountInfo.amount.eq(new anchor.BN(0)))
   })
   it('#deposit()', async () => {
-    const userWallet = new anchor.web3.Account()
+    const userWallet = await newAccountWithLamports(systemProgram.provider.connection)
     const userAccount = new anchor.web3.Account()
     await systemProgram.rpc.createUserAccount(userWallet.publicKey, {
       accounts: {
@@ -91,7 +92,7 @@ describe('system', () => {
     assert.ok(account.shares.eq(new anchor.BN(0)))
     assert.ok(account.collateral.eq(new anchor.BN(0)))
     assert.ok(account.owner.equals(userWallet.publicKey))
-    const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
+    const userCollateralTokenAccount = await collateralToken.createAccount(userWallet.publicKey)
     const amount = new anchor.BN(10)
     await collateralToken.mintTo(userCollateralTokenAccount, wallet, [], tou64(amount))
 
@@ -104,11 +105,13 @@ describe('system', () => {
         userAccount: userAccount.publicKey,
         collateralAccount: collateralAccount
       },
+      signers: [userWallet],
       instructions: [
-        await collateralToken.transfer(
+        Token.createTransferInstruction(
+          collateralToken.programId,
           userCollateralTokenAccount,
           collateralAccount,
-          userAccount,
+          userWallet.publicKey,
           [],
           tou64(amount.toString())
         )
@@ -213,14 +216,15 @@ describe('system', () => {
       )
     })
     it('mint wrong token', async () => {
-      const { userSystemAccount } = await createAccountWithCollateral({
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
         systemProgram,
         amount: new anchor.BN(100 * 1e8)
       })
-      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      const stateBefore = await systemProgram.state()
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       try {
         await systemProgram.state.rpc.mint(new anchor.BN(1), {
           accounts: {
@@ -231,14 +235,7 @@ describe('system', () => {
             clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
             userAccount: userSystemAccount.publicKey
           },
-          instructions: [
-            await systemProgram.state.rpc.updatePrice(collateralTokenFeed.publicKey, {
-              accounts: {
-                priceFeedAccount: collateralTokenFeed.publicKey,
-                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-              }
-            })
-          ]
+          instructions: await updateAllFeeds(stateBefore, systemProgram)
         })
         assert.ok(false)
       } catch (error) {
@@ -246,14 +243,14 @@ describe('system', () => {
       }
     })
     it('mint over limit', async () => {
-      const { userSystemAccount } = await createAccountWithCollateral({
+      const { userSystemAccount, userWallet } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
         systemProgram,
         amount: new anchor.BN(100 * 1e8)
       })
-      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       try {
         await mintUsd({
           systemProgram,
@@ -289,7 +286,7 @@ describe('system', () => {
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
         },
-        instructions: [await updateAllFeeds(stateBefore, systemProgram)]
+        instructions: await updateAllFeeds(stateBefore, systemProgram)
       })
 
       const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
@@ -306,14 +303,18 @@ describe('system', () => {
     it('withdraw with debt', async () => {
       const amountCollateral = new anchor.BN(100 * 1e8)
       const mintAmount = new anchor.BN(10 * 1e8)
-      const { userSystemAccount, userCollateralTokenAccount } = await createAccountWithCollateral({
+      const {
+        userSystemAccount,
+        userCollateralTokenAccount,
+        userWallet
+      } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
         systemProgram,
         amount: amountCollateral
       })
-      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
         systemProgram,
         userSystemAccount,
@@ -334,7 +335,7 @@ describe('system', () => {
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
         },
-        instructions: [await updateAllFeeds(stateBefore, systemProgram)]
+        instructions: await updateAllFeeds(stateBefore, systemProgram)
       })
 
       const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
@@ -351,14 +352,18 @@ describe('system', () => {
     it('withdraw with debt over limit', async () => {
       const amountCollateral = new anchor.BN(100 * 1e8)
       const mintAmount = new anchor.BN(10 * 1e8)
-      const { userSystemAccount, userCollateralTokenAccount } = await createAccountWithCollateral({
+      const {
+        userSystemAccount,
+        userCollateralTokenAccount,
+        userWallet
+      } = await createAccountWithCollateral({
         collateralAccount,
         collateralToken,
         mintAuthority: wallet,
         systemProgram,
         amount: amountCollateral
       })
-      const userTokenAccount = await syntheticUsd.createAccount(userSystemAccount.publicKey)
+      const userTokenAccount = await syntheticUsd.createAccount(userWallet.publicKey)
       await mintUsd({
         systemProgram,
         userSystemAccount,
@@ -379,7 +384,7 @@ describe('system', () => {
             tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
             clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
           },
-          instructions: [await updateAllFeeds(stateBefore, systemProgram)]
+          instructions: await updateAllFeeds(stateBefore, systemProgram)
         })
       } catch (error) {
         assert.ok(error.toString(), 'Not enough collateral')
@@ -578,7 +583,7 @@ describe('system', () => {
           tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
         },
-        instructions: [await updateAllFeeds(stateUpdated, systemProgram)]
+        instructions: await updateAllFeeds(stateUpdated, systemProgram)
       })
       const accountUsd = await syntheticUsd.getAccountInfo(userSyntheticUsdAccount)
       const accountNewToken = await newToken.getAccountInfo(userNewTokenAccount)

@@ -198,6 +198,7 @@ pub mod system {
             ctx: Context<UpdatePrice>,
             feed_address: Pubkey,
         ) -> Result<()> {
+            msg!("#################################");
             let asset = self
                 .assets
                 .iter_mut()
@@ -429,6 +430,8 @@ pub struct AddAsset<'info> {
 }
 #[derive(Accounts)]
 pub struct Deposit<'info> {
+    // #[account(signer)]
+    // pub test: AccountInfo<'info>,
     #[account(mut)]
     pub user_account: ProgramAccount<'info, UserAccount>,
     pub collateral_account: CpiAccount<'info, TokenAccount>,

@@ -21,8 +21,8 @@
   "homepage": "https://github.com/Synthetify/hackatonV2#readme",
   "dependencies": {
     "@project-serum/serum": "^0.13.21",
-    "@solana/spl-token": "0.0.13",
-    "@solana/web3.js": "^0.90.5",
+    "@solana/spl-token": "^0.0.13",
+    "@solana/web3.js": "^0.91.3",
     "@project-serum/anchor": "^0.2.1"
   },
   "devDependencies": {

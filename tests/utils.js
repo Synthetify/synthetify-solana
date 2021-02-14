@@ -1,7 +1,7 @@
 const { Token, u64 } = require('@solana/spl-token')
 const TokenInstructions = require('@project-serum/serum').TokenInstructions
 const anchor = require('@project-serum/anchor')
-
+const { Transaction, sendAndConfirmTransaction } = require('@solana/web3.js')
 const createToken = async ({ connection, wallet, mintAuthority }) => {
   const token = await Token.createMint(
     connection,
@@ -20,7 +20,7 @@ const createAccountWithCollateral = async ({
   collateralAccount,
   amount = new anchor.BN(100 * 1e8)
 }) => {
-  const userWallet = new anchor.web3.Account()
+  const userWallet = await newAccountWithLamports(systemProgram.provider.connection)
   const userAccount = new anchor.web3.Account()
   await systemProgram.rpc.createUserAccount(userWallet.publicKey, {
     accounts: {
@@ -31,7 +31,7 @@ const createAccountWithCollateral = async ({
     // Auto allocate memory
     instructions: [await systemProgram.account.userAccount.createInstruction(userAccount)]
   })
-  const userCollateralTokenAccount = await collateralToken.createAccount(userAccount.publicKey)
+  const userCollateralTokenAccount = await collateralToken.createAccount(userWallet.publicKey)
   await collateralToken.mintTo(
     userCollateralTokenAccount,
     mintAuthority,
@@ -44,11 +44,13 @@ const createAccountWithCollateral = async ({
       userAccount: userAccount.publicKey,
       collateralAccount: collateralAccount
     },
+    signers: [userWallet],
     instructions: [
-      await collateralToken.transfer(
+      Token.createTransferInstruction(
+        collateralToken.programId,
         userCollateralTokenAccount,
         collateralAccount,
-        userAccount,
+        userWallet.publicKey,
         [],
         tou64(amount.toString())
       )
@@ -75,14 +77,18 @@ const createPriceFeed = async ({
 }
 const updateAllFeeds = async (state, systemProgram) => {
   // first token is synthetic usd
+  const transactions = []
   for (let index = 1; index < state.assets.length; index++) {
-    await systemProgram.state.rpc.updatePrice(state.assets[index].feedAddress, {
-      accounts: {
-        priceFeedAccount: state.assets[index].feedAddress,
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
-      }
-    })
+    transactions.push(
+      await systemProgram.state.instruction.updatePrice(state.assets[index].feedAddress, {
+        accounts: {
+          priceFeedAccount: state.assets[index].feedAddress,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY
+        }
+      })
+    )
   }
+  return transactions
 }
 const mintUsd = async ({
   systemProgram,
@@ -92,7 +98,7 @@ const mintUsd = async ({
   mintAuthority
 }) => {
   const state = await systemProgram.state()
-
+  const updateAllFeedsTxs = await updateAllFeeds(state, systemProgram)
   await systemProgram.state.rpc.mint(mintAmount, {
     accounts: {
       authority: mintAuthority,
@@ -102,18 +108,41 @@ const mintUsd = async ({
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
       userAccount: userSystemAccount.publicKey
     },
-    instructions: [await updateAllFeeds(state, systemProgram)]
+    instructions: updateAllFeedsTxs
   })
 }
 const tou64 = (amount) => {
   // eslint-disable-next-line new-cap
   return new u64(amount.toString())
 }
+const newAccountWithLamports = async (connection, lamports = 1e11) => {
+  const account = new anchor.web3.Account()
+
+  let retries = 30
+  await connection.requestAirdrop(account.publicKey, lamports)
+  for (;;) {
+    await sleep(500)
+    // eslint-disable-next-line eqeqeq
+    if (lamports == (await connection.getBalance(account.publicKey))) {
+      return account
+    }
+    if (--retries <= 0) {
+      break
+    }
+  }
+  throw new Error(`Airdrop of ${lamports} failed`)
+}
+
+const sleep = (ms) => {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 module.exports = {
   createToken,
   createAccountWithCollateral,
   createPriceFeed,
   mintUsd,
   updateAllFeeds,
-  tou64
+  tou64,
+  newAccountWithLamports
 }
