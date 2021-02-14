@@ -38,14 +38,19 @@ const createAccountWithCollateral = async ({
     [],
     tou64(amount.toString())
   )
+  const mintTx = Token.createMintToInstruction(
+    collateralToken.programId,
+    collateralToken.publicKey,
+    userCollateralTokenAccount,
+    mintAuthority.publicKey,
+    [],
+    tou64(amount.toString())
+  )
+  const info = await collateralToken.getAccountInfo(userCollateralTokenAccount)
+  console.log(info.amount.toString())
 
-  const depositTx = await systemProgram.state.instruction.deposit({
-    accounts: {
-      userAccount: userAccount.publicKey,
-      collateralAccount: collateralAccount
-    }
-  })
   const transaction = new Transaction()
+    // .add(mintTx)
     .add(
       Token.createTransferInstruction(
         collateralToken.programId,
@@ -56,11 +61,43 @@ const createAccountWithCollateral = async ({
         tou64(amount.toString())
       )
     )
-    .add(depositTx)
+  console.log(info.amount.toString())
+
   await sendAndConfirmTransaction(systemProgram.provider.connection, transaction, [userWallet], {
     preflightCommitment: 'recent',
     commitment: 'recent'
   })
+  const info2 = await collateralToken.getAccountInfo(userCollateralTokenAccount)
+
+  // console.log(
+  //   collateralToken.transfer(
+  //     userCollateralTokenAccount,
+  //     collateralAccount,
+  //     userAccount,
+  //     [],
+  //     tou64(amount.toString())
+  //   )
+  // )
+  console.log(info2.amount.toString())
+  await systemProgram.state.rpc.deposit({
+    accounts: {
+      userAccount: userAccount.publicKey,
+      collateralAccount: collateralAccount
+    },
+    signers: [],
+    instructions: [
+      Token.createTransferInstruction(
+        collateralToken.programId,
+        userCollateralTokenAccount,
+        collateralAccount,
+        userWallet.publicKey,
+        [userWallet],
+        tou64(amount.toString())
+      )
+    ]
+  })
+  const info3 = await collateralToken.getAccountInfo(userCollateralTokenAccount)
+  console.log(info3.amount.toString())
 
   return { userWallet, userSystemAccount: userAccount, userCollateralTokenAccount }
 }
