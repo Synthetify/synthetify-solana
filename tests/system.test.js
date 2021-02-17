@@ -53,6 +53,7 @@ describe('system', () => {
       collateralAccount,
       collateralTokenFeed.publicKey,
       syntheticUsd.publicKey,
+      mintAuthority,
       {
         accounts: {}
       }
@@ -61,7 +62,6 @@ describe('system', () => {
   beforeEach(async () => {})
   it('Check initialState', async () => {
     const state = await systemProgram.state()
-    // console.log(state)
     assert.ok(state.nonce === nonce)
     assert.ok(state.initialized === true)
     assert.ok(state.signer.equals(signer.publicKey))
@@ -137,7 +137,7 @@ describe('system', () => {
     assert.ok(state.assets[1].price.eq(initPrice))
   })
   describe('#mint()', () => {
-    const firstMintAmount = new anchor.BN(1 * 1e8)
+    const firstMintAmount = new anchor.BN(1 * 1e7)
     const firstMintShares = new anchor.BN(1 * 1e8)
     it('1st mint', async () => {
       const { userSystemAccount, userWallet } = await createAccountWithCollateral({
@@ -564,7 +564,7 @@ describe('system', () => {
       const tokenFeed = await createPriceFeed({ admin, oracleProgram, tokenPrice })
 
       // TODO: Create and Add price feed to this new token
-      await systemProgram.state.rpc.addAsset({
+      await systemProgram.state.rpc.addAsset(Buffer.from('test'), {
         accounts: {
           assetAddress: newToken.publicKey,
           feedAddress: tokenFeed.publicKey,

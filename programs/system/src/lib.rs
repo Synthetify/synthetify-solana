@@ -14,6 +14,7 @@ pub mod system {
         pub nonce: u8,
         pub signer: Pubkey,
         pub admin: Pubkey,
+        pub mint_authority: Pubkey,
         pub initialized: bool,
         pub debt: u64,
         pub shares: u64,
@@ -27,14 +28,21 @@ pub mod system {
     }
 
     impl InternalState {
-        pub const ASSETS_SIZE: usize = 3;
+        pub const ASSETS_SIZE: usize = 10;
         pub fn new(_ctx: Context<New>) -> Result<Self> {
-            let mut assets = vec![];
-            assets.resize(Self::ASSETS_SIZE, Default::default());
+            let mut assets: Vec<Asset> = vec![];
+            assets.resize(
+                Self::ASSETS_SIZE,
+                Asset {
+                    ticker: vec![1, 2, 3, 4, 5],
+                    ..Default::default()
+                },
+            );
             Ok(Self {
                 nonce: 0,
                 signer: Pubkey::default(),
                 admin: Pubkey::default(),
+                mint_authority: Pubkey::default(),
                 initialized: false,
                 debt: 0,
                 shares: 0,
@@ -57,6 +65,7 @@ pub mod system {
             collateral_account: Pubkey,
             collateral_token_feed: Pubkey,
             usd_token: Pubkey,
+            mint_authority: Pubkey,
         ) -> Result<()> {
             self.initialized = true;
             self.signer = signer;
@@ -64,6 +73,7 @@ pub mod system {
             self.admin = admin;
             self.collateral_token = collateral_token;
             self.collateral_account = collateral_account;
+            self.mint_authority = mint_authority;
             //clean asset array + add synthetic Usd
             let usd_asset = Asset {
                 decimals: 8,
@@ -72,6 +82,7 @@ pub mod system {
                 last_update: std::u64::MAX,
                 price: 1 * 10u64.pow(4),
                 supply: 0,
+                ticker: "xUSD".as_bytes().to_vec(),
             };
             let collateral_asset = Asset {
                 decimals: 8,
@@ -80,13 +91,13 @@ pub mod system {
                 last_update: 0,
                 price: 0,
                 supply: 0,
+                ticker: "SNY".as_bytes().to_vec(),
             };
             self.assets = vec![usd_asset, collateral_asset];
             Ok(())
         }
         // This only support sythetic USD
         pub fn mint(&mut self, ctx: Context<Mint>, amount: u64) -> Result<()> {
-            msg!("mint");
             let user_account = &mut ctx.accounts.user_account;
             let mint_token_adddress = ctx.accounts.mint.to_account_info().clone().key;
             if !mint_token_adddress.eq(&self.assets[0].asset_address) {
@@ -94,7 +105,6 @@ pub mod system {
             }
             let slot = ctx.accounts.clock.slot;
             let debt = calculate_debt(&self.assets, slot, self.max_delay).unwrap();
-
             let user_debt = calculate_user_debt_in_usd(user_account, debt, self.shares);
             let collateral_asset = self
                 .assets
@@ -108,17 +118,19 @@ pub mod system {
                 .iter_mut()
                 .find(|x| x.asset_address == *mint_token_adddress)
                 .unwrap();
-            let amount_mint_usd = calculate_amount_mint_in_usd(*mint_asset, amount);
-
+            let amount_mint_usd = calculate_amount_mint_in_usd(&mint_asset, amount);
+            msg!("debt {}", debt);
             let max_user_debt = calculate_max_user_debt_in_usd(
-                collateral_asset,
+                &collateral_asset,
                 self.collateralization_level,
                 user_account,
             );
+            msg!("mint {}", 123);
             if max_user_debt - user_debt < amount_mint_usd {
                 return Err(ErrorCode::MintLimit.into());
             }
             let new_shares = calculate_new_shares(&self.shares, &debt, &amount_mint_usd);
+            msg!("mint {}", 1234);
             self.debt = debt + amount_mint_usd;
 
             self.shares += new_shares;
@@ -144,7 +156,7 @@ pub mod system {
                 .unwrap();
 
             let max_user_debt = calculate_max_user_debt_in_usd(
-                collateral_asset,
+                &collateral_asset,
                 self.collateralization_level,
                 user_account,
             );
@@ -171,8 +183,8 @@ pub mod system {
             Ok(())
         }
 
-        pub fn add_asset(&mut self, ctx: Context<AddAsset>) -> Result<()> {
-            if !self.admin.eq(ctx.accounts.admin.key){
+        pub fn add_asset(&mut self, ctx: Context<AddAsset>, ticker: Vec<u8>) -> Result<()> {
+            if !self.admin.eq(ctx.accounts.admin.key) {
                 return Err(ErrorCode::Unauthorized.into());
             }
             if self.assets.len() == Self::ASSETS_SIZE {
@@ -186,6 +198,7 @@ pub mod system {
                 supply: 0,
                 last_update: 0,
                 decimals: 8,
+                ticker: ticker,
             };
             self.assets.push(new_asset);
             Ok(())
@@ -213,6 +226,7 @@ pub mod system {
                 .find(|x| x.feed_address == feed_address)
                 .unwrap();
             let slot = ctx.accounts.clock.slot;
+            msg!("updated slot {}", slot);
             asset.price = ctx.accounts.price_feed_account.price;
             asset.last_update = slot;
             Ok(())
@@ -461,7 +475,7 @@ pub struct UserAccount {
     pub collateral: u64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Default, Copy, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Default, Clone)]
 pub struct Asset {
     pub feed_address: Pubkey,
     pub asset_address: Pubkey,
@@ -469,6 +483,7 @@ pub struct Asset {
     pub last_update: u64,
     pub supply: u64,
     pub decimals: u8,
+    pub ticker: Vec<u8>,
 }
 
 #[error]

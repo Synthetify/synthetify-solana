@@ -4,12 +4,12 @@
 
 const anchor = require('@project-serum/anchor')
 const { createPriceFeed, createToken } = require('../tests/utils')
+const admin = require('./testAdmin')
 module.exports = async function (provider) {
   // Configure client to use the provider.
   anchor.setProvider(provider)
   const connection = provider.connection
   const wallet = provider.wallet.payer
-  const admin = wallet
   console.log(wallet.publicKey.toString())
   const systemProgram = anchor.workspace.System
   const oracleProgram = anchor.workspace.Oracle
@@ -32,16 +32,19 @@ module.exports = async function (provider) {
   nonce = _nonce
   mintAuthority = _mintAuthority
   collateralTokenFeed = await createPriceFeed({ admin, oracleProgram, initPrice, ticker })
-  collateralToken = await createToken({ connection, wallet, mintAuthority: wallet.publicKey })
+  collateralToken = await createToken({ connection, wallet, mintAuthority: admin.publicKey })
   collateralAccount = await collateralToken.createAccount(mintAuthority)
   syntheticUsd = await createToken({ connection, wallet, mintAuthority })
+  console.log(mintAuthority)
   await systemProgram.state.rpc.initialize(
     _nonce,
     signer.publicKey,
+    wallet.publicKey,
     collateralToken.publicKey,
     collateralAccount,
     collateralTokenFeed.publicKey,
     syntheticUsd.publicKey,
+    mintAuthority,
     {
       accounts: {}
     }

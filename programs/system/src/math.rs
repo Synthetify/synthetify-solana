@@ -14,7 +14,12 @@ pub fn calculate_debt(assets: &Vec<Asset>, slot: u64, max_delay: u32) -> Result<
     let mut debt = 0u64;
     for asset in assets.iter() {
         if (asset.last_update + max_delay as u64) < slot {
-            return Err(ErrorCode::OutdatedOracle.into());
+            msg!("last update {}", asset.last_update);
+            msg!("slot {}", slot);
+            if asset.feed_address.eq(&Pubkey::default()) {
+            } else {
+                return Err(ErrorCode::OutdatedOracle.into());
+            }
         }
         debt += (asset.price * asset.supply)
             / 10u64.pow(
@@ -34,7 +39,7 @@ pub fn calculate_user_debt_in_usd(user_account: &UserAccount, debt: u64, debt_sh
     return user_debt;
 }
 pub fn calculate_max_user_debt_in_usd(
-    collateral_asset: Asset,
+    collateral_asset: &Asset,
     collateralization_level: u32,
     user_account: &UserAccount,
 ) -> u64 {
@@ -56,7 +61,7 @@ pub fn calculate_max_withdraw_in_usd(
     }
     return ((max_user_debt_in_usd - user_debt_in_usd) * *collateralization_level as u64) / 100;
 }
-pub fn calculate_amount_mint_in_usd(mint_asset: Asset, amount: u64) -> u64 {
+pub fn calculate_amount_mint_in_usd(mint_asset: &Asset, amount: u64) -> u64 {
     let mint_amount_in_usd = mint_asset.price * amount
         / 10u64.pow(
             (mint_asset.decimals + ORACLE_OFFSET - ACCURACCY)
@@ -203,7 +208,7 @@ mod tests {
         // 10 tokens per 12 $ each => 120
         // collateralization_level 1/5 means 120*1/5 => 24 * decimals
         let user_max_debt = calculate_max_user_debt_in_usd(
-            collateral_asset,
+            &collateral_asset,
             collateralization_level,
             &user_account,
         );
@@ -219,7 +224,7 @@ mod tests {
             ..Default::default()
         };
         // 10 tokens per 12 $ each => 120 * decimals
-        let amount_mint_in_usd = calculate_amount_mint_in_usd(mint_asset, amount);
+        let amount_mint_in_usd = calculate_amount_mint_in_usd(&mint_asset, amount);
         assert_eq!(amount_mint_in_usd, 120 * 10u64.pow(8));
     }
     #[test]

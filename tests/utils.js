@@ -61,7 +61,7 @@ const createPriceFeed = async ({
   oracleProgram,
   admin,
   initPrice = new anchor.BN(2 * 1e4),
-  ticker = Buffer.from('GME')
+  ticker = Buffer.from('SNY')
 }) => {
   const collateralTokenFeed = new anchor.web3.Account()
   await oracleProgram.rpc.create(admin.publicKey, initPrice, ticker, {
@@ -117,7 +117,7 @@ const tou64 = (amount) => {
   // eslint-disable-next-line new-cap
   return new u64(amount.toString())
 }
-const newAccountWithLamports = async (connection, lamports = 1e11) => {
+const newAccountWithLamports = async (connection, lamports = 1e10) => {
   const account = new anchor.web3.Account()
 
   let retries = 30
