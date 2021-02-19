@@ -10,6 +10,29 @@ const ORACLE_OFFSET: u8 = 4;
 // At least rust will error during overflows checkmate Solidity
 
 // USD prices have 8 decimal places
+pub fn check_feed_update(
+    assets: &Vec<Asset>,
+    indexA: usize,
+    indexB: usize,
+    max_delay: u32,
+    slot: u64,
+) -> Result<()> {
+    // Check assetA
+    if !assets[indexA].feed_address.eq(&Pubkey::default()) {
+        msg!("checkA {}", slot);
+        if (assets[indexA].last_update + max_delay as u64) < slot {
+            return Err(ErrorCode::OutdatedOracle.into());
+        }
+    }
+    // Check assetB
+    if !assets[indexB].feed_address.eq(&Pubkey::default()) {
+        msg!("checkB {}", slot);
+        if (assets[indexB].last_update + max_delay as u64) < slot {
+            return Err(ErrorCode::OutdatedOracle.into());
+        }
+    }
+    return Ok(());
+}
 pub fn calculate_debt(assets: &Vec<Asset>, slot: u64, max_delay: u32) -> Result<u64> {
     let mut debt = 0u64;
     for asset in assets.iter() {

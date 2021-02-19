@@ -15,6 +15,11 @@ const {
 } = require('./utils')
 
 describe('system', () => {
+  // const provider = anchor.Provider.local('https://devnet.solana.com', {
+  //   commitment: 'max',
+  //   preflightCommitment: 'max',
+  //   skipPreflight: true
+  // })
   const provider = anchor.Provider.local()
   anchor.setProvider(provider)
   const connection = provider.connection
@@ -22,6 +27,7 @@ describe('system', () => {
   const admin = wallet
   const systemProgram = anchor.workspace.System
   const oracleProgram = anchor.workspace.Oracle
+  const signer = new anchor.web3.Account()
   const signer = new anchor.web3.Account()
   let collateralToken
   let mintAuthority
@@ -32,32 +38,36 @@ describe('system', () => {
   const initPrice = new anchor.BN(2 * 1e4)
   const ticker = Buffer.from('SNY', 'utf-8')
   before(async () => {
-    await systemProgram.state.rpc.new({
-      accounts: {}
-    })
-    const [_mintAuthority, _nonce] = await anchor.web3.PublicKey.findProgramAddress(
-      [signer.publicKey.toBuffer()],
-      systemProgram.programId
-    )
-    nonce = _nonce
-    mintAuthority = _mintAuthority
-    collateralTokenFeed = await createPriceFeed({ admin, oracleProgram, initPrice, ticker })
-    collateralToken = await createToken({ connection, wallet, mintAuthority: wallet.publicKey })
-    collateralAccount = await collateralToken.createAccount(mintAuthority)
-    syntheticUsd = await createToken({ connection, wallet, mintAuthority })
-    await systemProgram.state.rpc.initialize(
-      _nonce,
-      signer.publicKey,
-      wallet.publicKey,
-      collateralToken.publicKey,
-      collateralAccount,
-      collateralTokenFeed.publicKey,
-      syntheticUsd.publicKey,
-      mintAuthority,
-      {
+    try {
+      await systemProgram.state.rpc.new({
         accounts: {}
-      }
-    )
+      })
+      const [_mintAuthority, _nonce] = await anchor.web3.PublicKey.findProgramAddress(
+        [signer.publicKey.toBuffer()],
+        systemProgram.programId
+      )
+      nonce = _nonce
+      mintAuthority = _mintAuthority
+      collateralTokenFeed = await createPriceFeed({ admin, oracleProgram, initPrice, ticker })
+      collateralToken = await createToken({ connection, wallet, mintAuthority: wallet.publicKey })
+      collateralAccount = await collateralToken.createAccount(mintAuthority)
+      syntheticUsd = await createToken({ connection, wallet, mintAuthority })
+      await systemProgram.state.rpc.initialize(
+        _nonce,
+        signer.publicKey,
+        wallet.publicKey,
+        collateralToken.publicKey,
+        collateralAccount,
+        collateralTokenFeed.publicKey,
+        syntheticUsd.publicKey,
+        mintAuthority,
+        {
+          accounts: {}
+        }
+      )
+    } catch (error) {
+      console.log(error)
+    }
   })
   beforeEach(async () => {})
   it('Check initialState', async () => {
@@ -137,7 +147,7 @@ describe('system', () => {
     assert.ok(state.assets[1].price.eq(initPrice))
   })
   describe('#mint()', () => {
-    const firstMintAmount = new anchor.BN(1 * 1e7)
+    const firstMintAmount = new anchor.BN(1 * 1e8)
     const firstMintShares = new anchor.BN(1 * 1e8)
     it('1st mint', async () => {
       const { userSystemAccount, userWallet } = await createAccountWithCollateral({
@@ -431,7 +441,22 @@ describe('system', () => {
         mintAmount: mintAmount
       })
 
-      await syntheticUsd.approve(userTokenAccount, mintAuthority, userWallet, [], mintAmount)
+      // await syntheticUsd.approve(userTokenAccount, mintAuthority, userWallet, [], mintAmount)
+      // console.log(syntheticUsd.programId.toString())
+      // console.log(userTokenAccount.toString())
+      // console.log(mintAuthority.toString())
+      // console.log(userWallet.publicKey.toString())
+      const approveTx = Token.createApproveInstruction(
+        syntheticUsd.programId,
+        userTokenAccount,
+        mintAuthority,
+        userWallet.publicKey,
+        [],
+        tou64(mintAmount)
+      )
+      // console.log(approveTx)
+      const oracleTxs = await updateAllFeeds(stateBefore, systemProgram)
+      oracleTxs.push(approveTx)
       await systemProgram.state.rpc.burn(mintAmount, {
         accounts: {
           authority: mintAuthority,
@@ -442,7 +467,8 @@ describe('system', () => {
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
           owner: userWallet.publicKey
         },
-        signers: [userWallet]
+        signers: [userWallet],
+        instructions: oracleTxs
       })
       const accountAfter = await syntheticUsd.getAccountInfo(userTokenAccount)
       const stateAfter = await systemProgram.state()
@@ -556,7 +582,7 @@ describe('system', () => {
       assert.ok(stateAfter.shares.eq(stateBefore.shares))
     })
   })
-  describe('#swap(', () => {
+  describe.only('#swap(', () => {
     it('swaps synthetic usd to other token', async () => {
       const tokenPrice = new anchor.BN(2 * 1e4)
       const mintedSyntheticUsd = new anchor.BN(100 * 1e8)

@@ -70,7 +70,9 @@ const createPriceFeed = async ({
       rent: anchor.web3.SYSVAR_RENT_PUBKEY
     },
     signers: [collateralTokenFeed],
-    instructions: [await oracleProgram.account.priceFeed.createInstruction(collateralTokenFeed, 56)]
+    instructions: [
+      await oracleProgram.account.priceFeed.createInstruction(collateralTokenFeed, 100)
+    ]
   })
   return collateralTokenFeed
 }

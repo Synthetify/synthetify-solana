@@ -34,7 +34,7 @@ pub mod system {
             assets.resize(
                 Self::ASSETS_SIZE,
                 Asset {
-                    ticker: vec![1, 2, 3, 4, 5],
+                    ticker: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                     ..Default::default()
                 },
             );
@@ -289,17 +289,22 @@ pub mod system {
                 .iter()
                 .position(|x| x.asset_address == *token_address_for)
                 .unwrap();
-            if (self.assets[asset_in_index].last_update + self.max_delay as u64) < slot
-                || (self.assets[asset_for_index].last_update + self.max_delay as u64) < slot
-            {
-                return Err(ErrorCode::OutdatedOracle.into());
-            }
+            check_feed_update(
+                &self.assets,
+                asset_in_index,
+                asset_for_index,
+                self.max_delay,
+                slot,
+            )
+            .unwrap();
             let amount_for = calculate_swap_out_amount(
                 &self.assets[asset_in_index],
                 &self.assets[asset_for_index],
                 &amount,
                 &self.fee,
             );
+            self.assets[asset_in_index].supply -= amount;
+            self.assets[asset_for_index].supply += amount_for;
             let seeds = &[self.signer.as_ref(), &[self.nonce]];
             let signer = &[&seeds[..]];
 

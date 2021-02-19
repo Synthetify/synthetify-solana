@@ -9,8 +9,8 @@ const main = async () => {
   const provider = anchor.Provider.local('https://devnet.solana.com')
   const oracleIdl = JSON.parse(require('fs').readFileSync('./target/idl/oracle.json', 'utf8'))
   const systemIdl = JSON.parse(require('fs').readFileSync('./target/idl/system.json', 'utf8'))
-  const oracleAddress = new anchor.web3.PublicKey('2BqmwMwZrEKBqycjFJm8tdnPiwd6XMcJS2i3PtePZiFi')
-  const systemAddress = new anchor.web3.PublicKey('4DrEykES68AK3UoSxi6iLismgqGTSV9vDrHiSbnREdT1')
+  const oracleAddress = new anchor.web3.PublicKey('65Yx3tYiJqbKW8VatPSmDBB2b4tENTQqj15wBT3MtAXh')
+  const systemAddress = new anchor.web3.PublicKey('4RnVyXHhr9ddNTkgNsQSHQ34TFdsaUNjzMVyh84Sw9Pd')
   // Configure client to use the provider.
   anchor.setProvider(provider)
   const connection = provider.connection
@@ -24,8 +24,8 @@ const main = async () => {
   // await connection.requestAirdrop(acc.publicKey, 1e10)
   const oracleProgram = new anchor.Program(oracleIdl, oracleAddress)
   const state = await systemProgram.state()
-  const userAccount = new anchor.web3.Account()
-  console.log(await systemProgram.account.userAccount.createInstruction(userAccount))
+  // const userAccount = new anchor.web3.Account()
+  // console.log(await systemProgram.account.userAccount.createInstruction(userAccount))
   // const signer = new anchor.web3.Account()
   // const initPrice = new anchor.BN(2 * 1e4)
   // const ticker = Buffer.from('SNY', 'utf-8')
