@@ -6,30 +6,49 @@ const anchor = require('@project-serum/anchor')
 const { PublicKey, Account } = require('@solana/web3.js')
 const { createPriceFeed, createToken, newAccountWithLamports } = require('../tests/utils')
 const admin = require('../migrations/testAdmin')
-
+const Binance = require('binance-api-node').default
 const main = async () => {
+  const client = Binance()
   const provider = anchor.Provider.local('https://devnet.solana.com', {
     commitment: 'singleGossip',
     preflightCommitment: 'singleGossip',
     skipPreflight: true
   })
   const oracleIdl = JSON.parse(require('fs').readFileSync('./target/idl/oracle.json', 'utf8'))
-  const oracleAddress = new anchor.web3.PublicKey('65Yx3tYiJqbKW8VatPSmDBB2b4tENTQqj15wBT3MtAXh')
-  // Configure client to use the provider.
+  const systemIdl = JSON.parse(require('fs').readFileSync('./target/idl/system.json', 'utf8'))
+  const oracleAddress = new anchor.web3.PublicKey('2DZFhZtw94pnyoXuLfovtYZwtv1ZBLqsr3va65KKVCsz')
+  const systemAddress = new anchor.web3.PublicKey('95tSv88thk5XPCXFaEuGbKUBuiHHVNaQr1m61xgu72p8')
+  const systemProgram = new anchor.Program(systemIdl, systemAddress, provider)
   anchor.setProvider(provider)
   const connection = provider.connection
   const wallet = provider.wallet.payer
-  // const admin = wallet
-  // console.log(wallet.publicKey.toString())
-  const oracleProgram = new anchor.Program(oracleIdl, oracleAddress)
+  const oracleProgram = new anchor.Program(oracleIdl, oracleAddress, provider)
   const newPrice = new anchor.BN(40 * 1e4)
-  const a = await oracleProgram.rpc.setPrice(newPrice, {
-    accounts: {
-      priceFeed: new PublicKey('Gc6V98AKUCZEb4WhzZdnLim6LVSjbqbsM7mUnLYe4gPi'),
-      admin: admin.publicKey
-    },
-    signers: [admin]
-  })
-  console.log(a)
+  const state = await systemProgram.state()
+  // console.log(state)
+  const updateOracle = async () => {
+    console.log('feed update')
+    for (const asset of state.assets) {
+      const ticker = asset.ticker.toString()
+      if (!ticker.startsWith('x') || ticker === 'xUSD') {
+        continue
+      }
+      // console.log(`${ticker.substring(1)}USDT`)
+      const price = await client.avgPrice({ symbol: `${ticker.substring(1)}USDT` })
+      const parsedPrice = (parseFloat(price.price) * 1e4).toFixed(0)
+      await oracleProgram.rpc.setPrice(new anchor.BN(parsedPrice), {
+        accounts: {
+          priceFeed: asset.feedAddress,
+          admin: wallet.publicKey
+        },
+        signers: [wallet]
+      })
+    }
+    setTimeout(async () => {
+      await updateOracle()
+    }, 60000)
+  }
+  await updateOracle()
 }
+
 main()
