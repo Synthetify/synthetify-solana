@@ -34,7 +34,7 @@ pub fn check_feed_update(
     return Ok(());
 }
 pub fn calculate_debt(assets: &Vec<Asset>, slot: u64, max_delay: u32) -> Result<u64> {
-    let mut debt = 0u64;
+    let mut debt = 0u128;
     for asset in assets.iter() {
         if (asset.last_update + max_delay as u64) < slot {
             msg!("last update {}", asset.last_update);
@@ -44,35 +44,37 @@ pub fn calculate_debt(assets: &Vec<Asset>, slot: u64, max_delay: u32) -> Result<
                 return Err(ErrorCode::OutdatedOracle.into());
             }
         }
-        debt += (asset.price * asset.supply)
-            / 10u64.pow(
+        debt += (asset.price as u128 * asset.supply as u128)
+            / 10u128.pow(
                 (asset.decimals + ORACLE_OFFSET - ACCURACCY)
                     .try_into()
                     .unwrap(),
             );
     }
-    Ok(debt)
+    Ok(debt as u64)
 }
 // debt need to be up to date
 pub fn calculate_user_debt_in_usd(user_account: &UserAccount, debt: u64, debt_shares: u64) -> u64 {
     if debt_shares == 0 {
         return 0;
     }
-    let user_debt = debt * user_account.shares / debt_shares;
-    return user_debt;
+    let user_debt = debt as u128 * user_account.shares as u128 / debt_shares as u128;
+    return user_debt as u64;
 }
 pub fn calculate_max_user_debt_in_usd(
     collateral_asset: &Asset,
     collateralization_level: u32,
     user_account: &UserAccount,
 ) -> u64 {
-    let user_max_debt = collateral_asset.price * user_account.collateral
-        / 10u64.pow(
+    let user_max_debt = collateral_asset.price as u128 * user_account.collateral as u128
+        / 10u128.pow(
             (collateral_asset.decimals + ORACLE_OFFSET - ACCURACCY)
                 .try_into()
                 .unwrap(),
         );
-    return user_max_debt * 100 / collateralization_level as u64;
+    return (user_max_debt * 100 / collateralization_level as u128)
+        .try_into()
+        .unwrap();
 }
 pub fn calculate_max_withdraw_in_usd(
     max_user_debt_in_usd: &u64,
@@ -85,21 +87,17 @@ pub fn calculate_max_withdraw_in_usd(
     return ((max_user_debt_in_usd - user_debt_in_usd) * *collateralization_level as u64) / 100;
 }
 pub fn calculate_amount_mint_in_usd(mint_asset: &Asset, amount: u64) -> u64 {
-    let mint_amount_in_usd = mint_asset.price * amount
-        / 10u64.pow(
-            (mint_asset.decimals + ORACLE_OFFSET - ACCURACCY)
-                .try_into()
-                .unwrap(),
-        );
-    return mint_amount_in_usd;
+    let mint_amount_in_usd = mint_asset.price as u128 * amount as u128
+        / 10u128.pow((mint_asset.decimals + ORACLE_OFFSET - ACCURACCY).into());
+    return mint_amount_in_usd as u64;
 }
 pub fn calculate_new_shares(shares: &u64, debt: &u64, minted_amount_usd: &u64) -> u64 {
     if *shares == 0u64 {
         return 10u64.pow(8);
     }
-    let new_shares = (*shares * *minted_amount_usd) / debt;
+    let new_shares = (*shares as u128 * *minted_amount_usd as u128) / *debt as u128;
 
-    return new_shares;
+    return new_shares as u64;
 }
 pub fn calculate_burned_shares(
     asset: &Asset,
@@ -107,14 +105,10 @@ pub fn calculate_burned_shares(
     user_shares: &u64,
     amount: &u64,
 ) -> u64 {
-    let burn_amount_in_usd = asset.price * amount
-        / 10u64.pow(
-            (asset.decimals + ORACLE_OFFSET - ACCURACCY)
-                .try_into()
-                .unwrap(),
-        );
-    let burned_shares = burn_amount_in_usd * user_shares / user_debt;
-    return burned_shares;
+    let burn_amount_in_usd = asset.price as u128 * *amount as u128
+        / 10u128.pow((asset.decimals + ORACLE_OFFSET - ACCURACCY).into());
+    let burned_shares = burn_amount_in_usd * *user_shares as u128 / *user_debt as u128;
+    return burned_shares as u64;
 }
 pub fn calculate_max_burned_in_token(asset: &Asset, user_debt: &u64) -> u64 {
     let burned_amount_token =
@@ -130,9 +124,9 @@ pub fn calculate_swap_out_amount(
 ) -> u64 {
     // Assume same amount of decimals
     // TODO: Fix that for future
-    let amount_before_fee = asset_in.price * amount / asset_for.price;
-    let amount = amount_before_fee - (amount_before_fee * *fee as u64 / 10000);
-    return amount;
+    let amount_before_fee = asset_in.price as u128 * *amount as u128 / asset_for.price as u128;
+    let amount = amount_before_fee - (amount_before_fee * *fee as u128 / 10000);
+    return amount as u64;
 }
 #[cfg(test)]
 mod tests {
@@ -175,6 +169,7 @@ mod tests {
             supply: 100 * 10u64.pow(8),
             last_update: slot - 10,
             decimals: 8,
+            feed_address: Pubkey::new_unique(),
             ..Default::default()
         };
         // debt 1000
