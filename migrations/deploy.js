@@ -5,8 +5,22 @@
 const anchor = require('@project-serum/anchor')
 const { createPriceFeed, createToken } = require('../tests/utils')
 const admin = require('./testAdmin')
-module.exports = async function (provider) {
+const initialTokens = [
+  { price: new anchor.BN(40 * 1e4), ticker: Buffer.from('xFTT') },
+  { price: new anchor.BN(50000 * 1e4), ticker: Buffer.from('xBTC') },
+  { price: new anchor.BN(12 * 1e4), ticker: Buffer.from('xSOL') },
+  { price: new anchor.BN(5 * 1e4), ticker: Buffer.from('xSRM') },
+  { price: new anchor.BN(2000 * 1e4), ticker: Buffer.from('xETH') },
+  { price: new anchor.BN(25 * 1e4), ticker: Buffer.from('xLINK') },
+  { price: new anchor.BN(300 * 1e4), ticker: Buffer.from('xBNB') }
+]
+module.exports = async function () {
   // Configure client to use the provider.
+  const provider = anchor.Provider.local('https://devnet.solana.com', {
+    commitment: 'singleGossip',
+    // preflightCommitment: 'max',
+    skipPreflight: true
+  })
   anchor.setProvider(provider)
   const connection = provider.connection
   const wallet = provider.wallet.payer
@@ -49,5 +63,25 @@ module.exports = async function (provider) {
       accounts: {}
     }
   )
-  // Add your deploy script here.
+  for (const tokenData of initialTokens) {
+    const newToken = await createToken({ connection, mintAuthority: mintAuthority, wallet })
+    const tokenFeed = await createPriceFeed({
+      admin: wallet,
+      oracleProgram,
+      initPrice: tokenData.price,
+      ticker: tokenData.ticker
+    })
+
+    await systemProgram.state.rpc.addAsset(tokenData.ticker, {
+      accounts: {
+        assetAddress: newToken.publicKey,
+        feedAddress: tokenFeed.publicKey,
+        admin: wallet.publicKey
+      },
+      signer: [wallet]
+    })
+    console.log(`deployed ${tokenData.ticker.toString()}`)
+  }
+  const state = await systemProgram.state()
+  console.log(state)
 }
