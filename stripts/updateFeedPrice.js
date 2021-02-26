@@ -28,25 +28,31 @@ const main = async () => {
   // console.log(state)
   const updateOracle = async () => {
     console.log('feed update')
-    for (const asset of state.assets) {
-      const ticker = asset.ticker.toString()
-      if (!ticker.startsWith('x') || ticker === 'xUSD') {
-        continue
+    try {
+      for (const asset of state.assets) {
+        const ticker = asset.ticker.toString()
+        if (!ticker.startsWith('x') || ticker === 'xUSD') {
+          continue
+        }
+        // console.log(`${ticker.substring(1)}USDT`)
+        const price = await client.avgPrice({ symbol: `${ticker.substring(1)}USDT` })
+        const parsedPrice = (parseFloat(price.price) * 1e4).toFixed(0)
+        await oracleProgram.rpc.setPrice(new anchor.BN(parsedPrice), {
+          accounts: {
+            priceFeed: asset.feedAddress,
+            admin: wallet.publicKey
+          },
+          signers: [wallet]
+        })
       }
-      // console.log(`${ticker.substring(1)}USDT`)
-      const price = await client.avgPrice({ symbol: `${ticker.substring(1)}USDT` })
-      const parsedPrice = (parseFloat(price.price) * 1e4).toFixed(0)
-      await oracleProgram.rpc.setPrice(new anchor.BN(parsedPrice), {
-        accounts: {
-          priceFeed: asset.feedAddress,
-          admin: wallet.publicKey
-        },
-        signers: [wallet]
-      })
+      setTimeout(async () => {
+        await updateOracle()
+      }, 60000)
+    } catch (error) {
+      setTimeout(async () => {
+        await updateOracle()
+      }, 60000)
     }
-    setTimeout(async () => {
-      await updateOracle()
-    }, 60000)
   }
   await updateOracle()
 }

@@ -28,7 +28,6 @@ describe('system', () => {
   const systemProgram = anchor.workspace.System
   const oracleProgram = anchor.workspace.Oracle
   const signer = new anchor.web3.Account()
-  const signer = new anchor.web3.Account()
   let collateralToken
   let mintAuthority
   let collateralAccount
@@ -582,7 +581,7 @@ describe('system', () => {
       assert.ok(stateAfter.shares.eq(stateBefore.shares))
     })
   })
-  describe.only('#swap(', () => {
+  describe('#swap(', () => {
     it('swaps synthetic usd to other token', async () => {
       const tokenPrice = new anchor.BN(2 * 1e4)
       const mintedSyntheticUsd = new anchor.BN(100 * 1e8)

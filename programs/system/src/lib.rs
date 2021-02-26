@@ -5,6 +5,8 @@ use anchor_spl::token::{self, Burn, MintTo, TokenAccount, Transfer};
 mod math;
 use math::*;
 use oracle::PriceFeed;
+
+// TODO add liquidation method
 #[program]
 pub mod system {
 
