@@ -1,2 +1,2 @@
-cluster = "devnet"
+cluster = "localnet"
 wallet = "/home/bless/.config/solana/id.json"
