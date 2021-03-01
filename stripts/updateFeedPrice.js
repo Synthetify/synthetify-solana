@@ -3,7 +3,13 @@
 // configured from the workspace's Anchor.toml.
 
 const anchor = require('@project-serum/anchor')
-const { PublicKey, Account } = require('@solana/web3.js')
+const {
+  PublicKey,
+  Account,
+  sendAndConfirmTransaction,
+  Transaction,
+  TransactionInstruction
+} = require('@solana/web3.js')
 const { createPriceFeed, createToken, newAccountWithLamports } = require('../tests/utils')
 const admin = require('../migrations/testAdmin')
 const Binance = require('binance-api-node').default
@@ -29,6 +35,7 @@ const main = async () => {
   const updateOracle = async () => {
     console.log('feed update')
     try {
+      const instructions = []
       for (const asset of state.assets) {
         const ticker = asset.ticker.toString()
         if (!ticker.startsWith('x') || ticker === 'xUSD') {
@@ -37,21 +44,31 @@ const main = async () => {
         // console.log(`${ticker.substring(1)}USDT`)
         const price = await client.avgPrice({ symbol: `${ticker.substring(1)}USDT` })
         const parsedPrice = (parseFloat(price.price) * 1e4).toFixed(0)
-        await oracleProgram.rpc.setPrice(new anchor.BN(parsedPrice), {
+        const ix = await oracleProgram.instruction.setPrice(new anchor.BN(parsedPrice), {
           accounts: {
             priceFeed: asset.feedAddress,
             admin: wallet.publicKey
           },
           signers: [wallet]
         })
+        instructions.push(ix)
       }
+      // console.log(instructions)
+      const tx = await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(...instructions),
+        [wallet]
+      )
+      console.log(tx)
       setTimeout(async () => {
         await updateOracle()
-      }, 60000)
+      }, 600000)
     } catch (error) {
+      console.log(error)
+
       setTimeout(async () => {
         await updateOracle()
-      }, 60000)
+      }, 600000)
     }
   }
   await updateOracle()
